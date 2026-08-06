@@ -191,6 +191,25 @@ fun SettingsDialog(onDismiss: () -> Unit, onSaved: () -> Unit) {
                 //         RecognitionServices.clearSelection(ctx)
                 //     }) { Text("恢复系统默认引擎") }
                 // }
+
+                HorizontalDivider()
+
+                // ===== 诊断信息（排查用） =====
+                Text("诊断", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                Text("后端地址: ${SecurePrefs.getBaseUrl(ctx)}",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                val lastCrash = remember { com.xs.storemanager.data.CrashLogger.latestCrash(ctx) }
+                if (lastCrash != null) {
+                    Text("最近崩溃: ${lastCrash.take(500)}",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = {
+                        val dir = java.io.File(ctx.filesDir, "crash_logs")
+                        dir.listFiles()?.forEach { it.delete() }
+                        vm.toast = "已清空崩溃日志"
+                    }) { Text("清空崩溃日志") }
+                } else {
+                    Text("无崩溃记录", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                }
             }
         },
         confirmButton = {

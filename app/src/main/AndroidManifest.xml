@@ -25,12 +25,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <!-- 崩溃详情页（不导出，仅内部启动） -->
-        <activity
-            android:name=".data.CrashActivity"
-            android:exported="false"
-            android:theme="@android:style/Theme.Black.NoTitleBar" />
     </application>
 
 </manifest>
