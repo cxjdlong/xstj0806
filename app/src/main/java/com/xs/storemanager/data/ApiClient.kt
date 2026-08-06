@@ -1,7 +1,6 @@
 package com.xs.storemanager.data
 
 import android.content.Context
-import com.xs.storemanager.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType

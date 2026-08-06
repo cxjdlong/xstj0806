@@ -10,6 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -95,7 +96,7 @@ fun SettingsDialog(onDismiss: () -> Unit, onSaved: () -> Unit) {
                     onValueChange = { password = it },
                     label = { Text("密码") },
                     singleLine = true,
-                    visualTransformation = if (showKey) PasswordVisualTransformation.None else PasswordVisualTransformation(),
+                    visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
                     enabled = !vm.saving,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -115,7 +116,7 @@ fun SettingsDialog(onDismiss: () -> Unit, onSaved: () -> Unit) {
                     onValueChange = { deepseekKey = it },
                     label = { Text("DeepSeek API Key") },
                     singleLine = true,
-                    visualTransformation = if (showKey) PasswordVisualTransformation.None else PasswordVisualTransformation(),
+                    visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
                     enabled = !vm.saving,
                     modifier = Modifier.fillMaxWidth()
                 )
