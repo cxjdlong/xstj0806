@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -167,24 +168,12 @@ fun StoreManagerApp(vm: MainViewModel) {
     // 启动时加载概览 + 草稿
     LaunchedEffect(Unit) {
         vm.online = NetworkMonitor.isOnline(ctx)
-        vm.loadDashboard(ctx)
         vm.refreshDrafts(ctx)
-        // 有网且有待补录草稿 → 自动补录
-        if (NetworkMonitor.isOnline(ctx)) {
-            vm.flushDrafts(ctx)
-        }
+        // 注意: 启动不自动调 loadDashboard/flushDrafts,避免网络阻塞主线程导致白屏
     }
 
-    // 网络恢复 → 自动补录草稿
-    val netCb = remember {
-        NetworkMonitor.observe(ctx) {
-            vm.online = true
-            vm.flushDrafts(ctx)
-        }
-    }
-    DisposableEffect(Unit) {
-        onDispose { NetworkMonitor.unregister(ctx, netCb) }
-    }
+    // 网络恢复 → 自动补录草稿（改为手动,避免启动阻塞）
+    // 移除自动网络监听,防止后台线程阻塞
 
     Scaffold(
         topBar = {
@@ -194,6 +183,10 @@ fun StoreManagerApp(vm: MainViewModel) {
                     // 网络状态
                     if (!vm.online) {
                         Text("离线", color = Color(0xFFF57C00), modifier = Modifier.padding(horizontal = 8.dp))
+                    }
+                    // 刷新按钮(手动加载数据)
+                    IconButton(onClick = { vm.loadDashboard(ctx) }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "刷新")
                     }
                     // 草稿入口（带数量角标）
                     if (vm.drafts.any { it.status == DraftItem.DRAFT_PENDING }) {
