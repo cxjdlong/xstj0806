@@ -79,4 +79,13 @@ object ApiClient {
         val obj = exec(ctx, "POST", "/api/sales", entry.toRequestBody())
         return obj.optString("msg", "录入成功")
     }
+
+    /** 纯文字录入：把自然语言文字 + AI地址提交给后端，后端调AI结构化并入库 */
+    suspend fun createTextEntry(ctx: Context, text: String, aiBase: String = "", apiKey: String = ""): String {
+        val body = JSONObject().put("text", text)
+        if (aiBase.isNotBlank()) body.put("ai_base", aiBase)
+        if (apiKey.isNotBlank()) body.put("api_key", apiKey)
+        val obj = exec(ctx, "POST", "/api/text-entries", body)
+        return obj.optString("msg", "录入成功")
+    }
 }

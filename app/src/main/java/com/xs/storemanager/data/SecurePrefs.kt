@@ -19,6 +19,8 @@ object SecurePrefs {
     private const val KEY_BASE_URL = "backend_base_url"
     private const val KEY_USERNAME = "username"
     private const val KEY_TOKEN = "token"
+    private const val KEY_AI_BASE = "ai_base"
+    private const val KEY_AI_KEY = "ai_api_key"
 
     private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -70,7 +72,7 @@ object SecurePrefs {
 
     fun getBaseUrl(ctx: Context): String =
         prefs(ctx).getString(KEY_BASE_URL, null)?.takeIf { it.isNotBlank() }
-            ?: "http://192.168.10.10:19117"
+            ?: "https://xs2.dx66.top:8888"
 
     fun saveCredential(ctx: Context, username: String, token: String) =
         prefs(ctx).edit().putString(KEY_USERNAME, username).putString(KEY_TOKEN, token).apply()
@@ -79,4 +81,17 @@ object SecurePrefs {
     fun getToken(ctx: Context): String? = prefs(ctx).getString(KEY_TOKEN, null)
     fun hasToken(ctx: Context): Boolean = !getToken(ctx).isNullOrBlank()
     fun clearCredential(ctx: Context) = prefs(ctx).edit().remove(KEY_USERNAME).remove(KEY_TOKEN).apply()
+
+    // AI 服务地址（用户填的 AI 对接地址，与项目同服务器，OpenAI 兼容）
+    fun saveAiBase(ctx: Context, url: String) =
+        prefs(ctx).edit().putString(KEY_AI_BASE, url.trim().trimEnd('/')).apply()
+
+    fun getAiBase(ctx: Context): String =
+        prefs(ctx).getString(KEY_AI_BASE, null)?.takeIf { it.isNotBlank() }
+            ?: "https://api.deepseek.com/v1"
+
+    fun saveAiKey(ctx: Context, key: String) =
+        prefs(ctx).edit().putString(KEY_AI_KEY, key.trim()).apply()
+
+    fun getAiKey(ctx: Context): String? = prefs(ctx).getString(KEY_AI_KEY, null)?.takeIf { it.isNotBlank() }
 }

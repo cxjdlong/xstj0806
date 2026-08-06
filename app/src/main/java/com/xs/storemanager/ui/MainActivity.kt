@@ -1,19 +1,13 @@
 package com.xs.storemanager.ui
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Mic
@@ -23,21 +17,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.xs.storemanager.data.*
-import com.xs.storemanager.speech.VoiceRecognizer
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class MainViewModel : ViewModel() {
     var dashboard by mutableStateOf<DashboardData?>(null)
@@ -50,6 +38,9 @@ class MainViewModel : ViewModel() {
     fun refreshDrafts(ctx: android.content.Context) {
         drafts = DraftsRepository.load(ctx)
     }
+
+    private fun aiArgs(ctx: android.content.Context): Pair<String, String> =
+        SecurePrefs.getAiBase(ctx) to (SecurePrefs.getAiKey(ctx) ?: "")
 
     fun loadDashboard(ctx: android.content.Context) {
         if (!SecurePrefs.hasToken(ctx)) { isLoggedIn = false; return }
@@ -72,8 +63,8 @@ class MainViewModel : ViewModel() {
     }
 
     /**
-     * 录入入口。
-     * - 有网：调 DeepSeek 结构化 → POST /api/sales 录入，成功后清空输入框
+     * 录入入口（纯文字，AI 结构化由后端处理）。
+     * - 有网：POST /api/text-entries 录入，成功后清空输入框
      * - 无网：把文字存入本地草稿（每条独立），提示已暂存，联网后自动补录
      */
     fun submit(ctx: android.content.Context, text: String, onDone: () -> Unit) {
@@ -88,8 +79,8 @@ class MainViewModel : ViewModel() {
             }
             loading = true
             try {
-                val entry = DeepSeekClient.analyze(ctx, text)
-                val msg = ApiClient.createSale(ctx, entry)
+                val (aiBase, aiKey) = aiArgs(ctx)
+                val msg = ApiClient.createTextEntry(ctx, text.trim(), aiBase, aiKey)
                 toast = msg
                 onDone()
                 loadDashboard(ctx)
@@ -101,7 +92,7 @@ class MainViewModel : ViewModel() {
         }
     }
 
-    /** 草稿自动补录：把全部 pending 草稿逐个格式化并录入数据库 */
+    /** 草稿自动补录：把全部 pending 草稿逐个提交后端（AI 结构化由后端处理） */
     fun flushDrafts(ctx: android.content.Context) {
         val pending = DraftsRepository.pending(ctx)
         if (pending.isEmpty()) return
@@ -109,8 +100,8 @@ class MainViewModel : ViewModel() {
         viewModelScope.launch {
             for (d in pending) {
                 try {
-                    val entry = DeepSeekClient.analyze(ctx, d.text)
-                    ApiClient.createSale(ctx, entry)
+                    val (aiBase, aiKey) = aiArgs(ctx)
+                    ApiClient.createTextEntry(ctx, d.text, aiBase, aiKey)
                     // 录入成功后才标记 done，避免中途崩溃丢草稿
                     DraftsRepository.updateStatus(ctx, d.id, DraftItem.DRAFT_DONE)
                 } catch (e: ApiException) {
@@ -138,9 +129,9 @@ class MainViewModel : ViewModel() {
     fun retryDraft(ctx: android.content.Context, d: DraftItem) {
         viewModelScope.launch {
             try {
+                val (aiBase, aiKey) = aiArgs(ctx)
+                ApiClient.createTextEntry(ctx, d.text, aiBase, aiKey)
                 DraftsRepository.updateStatus(ctx, d.id, DraftItem.DRAFT_DONE)
-                val entry = DeepSeekClient.analyze(ctx, d.text)
-                ApiClient.createSale(ctx, entry)
                 toast = "草稿已录入"
             } catch (e: ApiException) {
                 DraftsRepository.updateStatus(ctx, d.id, DraftItem.DRAFT_FAILED)
@@ -173,22 +164,6 @@ fun StoreManagerApp(vm: MainViewModel) {
     var showSettings by remember { mutableStateOf(false) }
     var showDrafts by remember { mutableStateOf(false) }
     var text by remember { mutableStateOf("") }
-    var listening by remember { mutableStateOf(false) }
-
-    // 录音权限
-    var hasMicPermission by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        )
-    }
-    val permLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted -> hasMicPermission = granted }
-
-    val voice = remember { VoiceRecognizer(ctx.applicationContext) }
-    DisposableEffect(Unit) {
-        onDispose { voice.destroy() }
-    }
 
     // 启动时加载概览 + 草稿
     LaunchedEffect(Unit) {
@@ -210,38 +185,6 @@ fun StoreManagerApp(vm: MainViewModel) {
     }
     DisposableEffect(Unit) {
         onDispose { NetworkMonitor.unregister(ctx, netCb) }
-    }
-
-    // 底部按钮按住说话
-    val micPress = Modifier.pointerInput(Unit) {
-        detectTapGestures(
-            onPress = {
-                if (!hasMicPermission) {
-                    permLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                    return@detectTapGestures
-                }
-                if (!voice.isAvailable()) {
-                    vm.toast = "当前设备无可用语音识别服务"
-                    return@detectTapGestures
-                }
-                listening = true
-                voice.start(object : VoiceRecognizer.Callback {
-                    override fun onResult(t: String) {
-                        listening = false
-                        text = (text.trimEnd() + " " + t.trim()).trim()
-                    }
-                    override fun onError(msg: String) {
-                        listening = false
-                        vm.toast = msg
-                    }
-                    override fun onStartListening() {}
-                    override fun onEndListening() { listening = false }
-                })
-                tryAwaitRelease()
-                voice.stop()
-                listening = false
-            }
-        )
     }
 
     Scaffold(
@@ -294,29 +237,25 @@ fun StoreManagerApp(vm: MainViewModel) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                placeholder = { Text("按住下方按钮说话，或手动输入，例如：卖了2台华为Mate60进价3800卖4200") },
+                placeholder = { Text("手动输入，例如：卖了2台华为Mate60进价3800卖4200") },
                 enabled = !vm.loading
             )
 
             Spacer(Modifier.height(16.dp))
 
-            // ===== 底部两按钮 =====
+            // ===== 底部按钮：语音(仅UI) + 录入 =====
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                // 左：按住说话
+                // 左：语音按钮（功能暂未实现，点击提示）
                 Button(
-                    onClick = {},
+                    onClick = { vm.toast = "语音录入功能开发中" },
                     modifier = Modifier
                         .weight(1f)
-                        .height(56.dp)
-                        .then(micPress),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (listening) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = if (listening) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                 ) {
                     Icon(Icons.Default.Mic, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text(if (listening) "松开结束" else "按住说话")
+                    Text("语音")
                 }
                 // 右：录入
                 Button(

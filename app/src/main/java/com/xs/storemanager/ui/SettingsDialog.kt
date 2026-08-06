@@ -18,7 +18,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.xs.storemanager.data.ApiClient
 import com.xs.storemanager.data.ApiException
 import com.xs.storemanager.data.SecurePrefs
-import com.xs.storemanager.speech.RecognitionServices
 import kotlinx.coroutines.launch
 
 class SettingsViewModel : ViewModel() {
@@ -60,7 +59,8 @@ fun SettingsDialog(onDismiss: () -> Unit, onSaved: () -> Unit) {
     var baseUrl by remember { mutableStateOf(SecurePrefs.getBaseUrl(ctx)) }
     var username by remember { mutableStateOf(SecurePrefs.getUsername(ctx) ?: "") }
     var password by remember { mutableStateOf("") }
-    var deepseekKey by remember { mutableStateOf(SecurePrefs.getDeepSeekKey(ctx) ?: "") }
+    var aiBase by remember { mutableStateOf(SecurePrefs.getAiBase(ctx)) }
+    var aiKey by remember { mutableStateOf(SecurePrefs.getAiKey(ctx) ?: "") }
     var showKey by remember { mutableStateOf(false) }
 
     AlertDialog(
@@ -110,11 +110,21 @@ fun SettingsDialog(onDismiss: () -> Unit, onSaved: () -> Unit) {
 
                 HorizontalDivider()
 
-                Text("AI 分析（DeepSeek）", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                // ===== AI 服务地址（用户填的 AI 对接地址，与项目同服务器，OpenAI 兼容） =====
+                Text("AI 服务", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                 OutlinedTextField(
-                    value = deepseekKey,
-                    onValueChange = { deepseekKey = it },
-                    label = { Text("DeepSeek API Key") },
+                    value = aiBase,
+                    onValueChange = { aiBase = it },
+                    label = { Text("AI 接口地址") },
+                    placeholder = { Text("如 https://api.deepseek.com/v1 或你对接的AI地址") },
+                    singleLine = true,
+                    enabled = !vm.saving,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = aiKey,
+                    onValueChange = { aiKey = it },
+                    label = { Text("API Key（可空）") },
                     singleLine = true,
                     visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
                     enabled = !vm.saving,
@@ -124,62 +134,63 @@ fun SettingsDialog(onDismiss: () -> Unit, onSaved: () -> Unit) {
                     Checkbox(checked = showKey, onCheckedChange = { showKey = it })
                     Text("显示密钥")
                 }
-                Text(
-                    "密钥仅 AES 加密保存在本机，只发送给 DeepSeek，不会上传到你的销售服务器。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
                 Button(
-                    onClick = { vm.saveDeepSeekKey(ctx, deepseekKey, onSaved) },
+                    onClick = {
+                        SecurePrefs.saveAiBase(ctx, aiBase)
+                        if (aiKey.isNotBlank()) SecurePrefs.saveAiKey(ctx, aiKey)
+                        vm.toast = "AI 服务已保存"
+                        onSaved()
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !vm.saving
                 ) {
-                    Text("保存 API Key")
+                    Text("保存 AI 服务")
                 }
 
                 HorizontalDivider()
 
-                Text("语音识别引擎", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-                Text(
-                    "选择按住说话时使用的输入法引擎。默认=系统当前输入法；选了指定引擎后，语音按钮会直接调用它（Android 13+ 生效）。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-                val engines = remember {
-                    RecognitionServices.list(ctx)
-                }
-                val currentSel = remember {
-                    RecognitionServices.getSelection(ctx)
-                }
-                if (engines.isEmpty()) {
-                    Text("未检测到可用的语音识别服务，请确认已安装带语音的输入法。",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                } else {
-                    engines.forEach { opt ->
-                        val selected = opt.packageName == currentSel?.first && opt.className == currentSel?.second
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            RadioButton(
-                                selected = selected,
-                                onClick = {
-                                    RecognitionServices.saveSelection(ctx, opt.packageName, opt.className)
-                                }
-                            )
-                            Column {
-                                Text(opt.label, style = MaterialTheme.typography.bodyMedium)
-                                if (opt.isDefault) {
-                                    Text("（系统默认）", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                                }
-                            }
-                        }
-                    }
-                    // 清除指定 → 回到系统默认
-                    TextButton(onClick = {
-                        RecognitionServices.clearSelection(ctx)
-                    }) { Text("恢复系统默认引擎") }
-                }
+                // ===== 语音识别引擎（已注释：语音模块暂关闭，先用纯文字录入） =====
+                // Text("语音识别引擎", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                // Text(
+                //     "选择按住说话时使用的输入法引擎。默认=系统当前输入法；选了指定引擎后，语音按钮会直接调用它（Android 13+ 生效）。",
+                //     style = MaterialTheme.typography.bodySmall,
+                //     color = MaterialTheme.colorScheme.outline
+                // )
+                // val engines = remember {
+                //     RecognitionServices.list(ctx)
+                // }
+                // val currentSel = remember {
+                //     RecognitionServices.getSelection(ctx)
+                // }
+                // if (engines.isEmpty()) {
+                //     Text("未检测到可用的语音识别服务，请确认已安装带语音的输入法。",
+                //         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                // } else {
+                //     engines.forEach { opt ->
+                //         val selected = opt.packageName == currentSel?.first && opt.className == currentSel?.second
+                //         Row(
+                //             modifier = Modifier.fillMaxWidth(),
+                //             verticalAlignment = Alignment.CenterVertically
+                //         ) {
+                //             RadioButton(
+                //                 selected = selected,
+                //                 onClick = {
+                //                     RecognitionServices.saveSelection(ctx, opt.packageName, opt.className)
+                //                 }
+                //             )
+                //             Column {
+                //                 Text(opt.label, style = MaterialTheme.typography.bodyMedium)
+                //                 if (opt.isDefault) {
+                //                     Text("（系统默认）", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                //                 }
+                //             }
+                //         }
+                //     }
+                //     // 清除指定 → 回到系统默认
+                //     TextButton(onClick = {
+                //         RecognitionServices.clearSelection(ctx)
+                //     }) { Text("恢复系统默认引擎") }
+                // }
             }
         },
         confirmButton = {
