@@ -91,7 +91,7 @@ async function ensureSql() {
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS contacts (
-  id TEXT PRIMARY KEY, name TEXT, codes TEXT, phones TEXT,
+  id TEXT PRIMARY KEY, name TEXT, province TEXT, codes TEXT, phones TEXT,
   created_at INTEGER, updated_at INTEGER
 );
 CREATE TABLE IF NOT EXISTS backups (
@@ -112,9 +112,9 @@ function newDb() {
 function dbFromStore() {
   const db = newDb()
   db.run('BEGIN')
-  const insC = db.prepare('INSERT INTO contacts (id,name,codes,phones,created_at,updated_at) VALUES (?,?,?,?,?,?)')
+  const insC = db.prepare('INSERT INTO contacts (id,name,province,codes,phones,created_at,updated_at) VALUES (?,?,?,?,?,?,?)')
   for (const c of store.contacts) {
-    insC.run([c.id, c.name || '', JSON.stringify(c.codes || []), JSON.stringify(c.phones || []), c.createdAt || 0, c.updatedAt || 0])
+    insC.run([c.id, c.name || '', c.province || '', JSON.stringify(c.codes || []), JSON.stringify(c.phones || []), c.createdAt || 0, c.updatedAt || 0])
   }
   insC.free()
   const insB = db.prepare('INSERT INTO backups (id,ts,label,file_name,path,count) VALUES (?,?,?,?,?,?)')
@@ -134,16 +134,23 @@ function storeFromBytes(bytes) {
   const db = new SQL.Database(bytes)
   const out = { contacts: [], backups: [] }
   try {
-    const r1 = db.exec('SELECT id,name,codes,phones,created_at,updated_at FROM contacts')
+    // 兼容旧库（没有 province 列时自动补列）
+    try {
+      const cols = db.exec('PRAGMA table_info(contacts)')
+      const names = cols[0] ? cols[0].values.map(v => v[1]) : []
+      if (!names.includes('province')) db.run('ALTER TABLE contacts ADD COLUMN province TEXT')
+    } catch (e) { /* 忽略 */ }
+    const r1 = db.exec('SELECT id,name,province,codes,phones,created_at,updated_at FROM contacts')
     if (r1[0]) {
       for (const row of r1[0].values) {
         out.contacts.push({
           id: String(row[0]),
           name: row[1] || '',
-          codes: safeArr(row[2]),
-          phones: safeArr(row[3]),
-          createdAt: Number(row[4]) || Date.now(),
-          updatedAt: Number(row[5]) || Date.now(),
+          province: row[2] || '',
+          codes: safeArr(row[3]),
+          phones: safeArr(row[4]),
+          createdAt: Number(row[5]) || Date.now(),
+          updatedAt: Number(row[6]) || Date.now(),
         })
       }
     }

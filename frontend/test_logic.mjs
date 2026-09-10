@@ -15,7 +15,7 @@ function ok(name, cond) {
 store.contacts.splice(0, store.contacts.length)
 
 console.log('【1】数据层')
-const a = addContact({ codes: ['A001', 'A002'], phones: ['13800000001', '13900000002'], name: '张三' })
+const a = addContact({ codes: ['A001', 'A002'], phones: ['13800000001', '13900000002'], name: '张三', province: '广东' })
 const b = addContact({ codes: ['B001'], phones: ['13800000009'], name: '' })
 ok('新增两条', store.contacts.length === 2)
 ok('编码去重(空值丢弃)', normList(['A001', 'A001', '  ', '  A002 ']).join(',') === 'A001,A002')
@@ -45,6 +45,8 @@ const rows = parseWorkbook(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf
 ok('解析行数=2', rows.length === 2)
 const zhang = rows.find(r => r.name === '张三')
 ok('张三编码/电话还原', zhang && zhang.codes.join(',') === 'A001,A002' && zhang.phones.join(',') === '13800000001,13900000002')
+ok('省份导出还原', zhang && zhang.province === '广东')
+ok('省份可按包含匹配', ['广东'].some(v => v.includes('广')))
 const li = rows.find(r => r.name === '李四')
 ok('李四还原', li && li.codes.join(',') === 'B001,B002' && li.phones.join(',') === '13800000009')
 ok('数字型电话不丢精度', !rows.some(r => /e\+|E\+/.test(r.phones.join(','))))

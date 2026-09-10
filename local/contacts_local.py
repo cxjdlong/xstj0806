@@ -36,7 +36,7 @@ DEFAULT_PORT = 19118
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS contacts (
-  id TEXT PRIMARY KEY, name TEXT, codes TEXT, phones TEXT,
+  id TEXT PRIMARY KEY, name TEXT, province TEXT, codes TEXT, phones TEXT,
   created_at INTEGER, updated_at INTEGER
 );
 CREATE TABLE IF NOT EXISTS backups (
@@ -59,6 +59,15 @@ def connect():
     ensure_dirs()
     con = sqlite3.connect(DB_PATH, timeout=10)
     con.executescript(SCHEMA)
+    # 兼容旧库：缺列自动补（SQLite 不给已存在的表加列）
+    try:
+        cur = con.cursor()
+        cols = [r[1] for r in cur.execute("PRAGMA table_info(contacts)")]
+        if "province" not in cols:
+            cur.execute("ALTER TABLE contacts ADD COLUMN province TEXT")
+            con.commit()
+    except Exception:
+        pass
     return con
 
 
@@ -68,10 +77,10 @@ def load_all():
         try:
             cur = con.cursor()
             contacts = []
-            for rid, name, codes, phones, ca, ua in cur.execute(
-                    "SELECT id,name,codes,phones,created_at,updated_at FROM contacts"):
+            for rid, name, province, codes, phones, ca, ua in cur.execute(
+                    "SELECT id,name,province,codes,phones,created_at,updated_at FROM contacts"):
                 contacts.append({
-                    "id": rid, "name": name or "",
+                    "id": rid, "name": name or "", "province": province or "",
                     "codes": safe_list(codes), "phones": safe_list(phones),
                     "createdAt": ca or 0, "updatedAt": ua or 0,
                 })
@@ -107,8 +116,8 @@ def save_all(payload):
             cur.execute("BEGIN")
             cur.execute("DELETE FROM contacts")
             cur.executemany(
-                "INSERT INTO contacts (id,name,codes,phones,created_at,updated_at) VALUES (?,?,?,?,?,?)",
-                [(c.get("id") or "", c.get("name") or "",
+                "INSERT INTO contacts (id,name,province,codes,phones,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+                [(c.get("id") or "", c.get("name") or "", c.get("province") or "",
                   json.dumps(c.get("codes") or [], ensure_ascii=False),
                   json.dumps(c.get("phones") or [], ensure_ascii=False),
                   int(c.get("createdAt") or 0), int(c.get("updatedAt") or 0)) for c in contacts])

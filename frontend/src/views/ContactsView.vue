@@ -6,7 +6,7 @@
         v-model="kw"
         class="search-input"
         type="search"
-        placeholder="输入编码 / 电话 / 姓名（包含即查询）"
+        placeholder="输入编码 / 电话 / 姓名 / 省份（包含即查询）"
         @keyup.enter="doSearch"
       />
       <button class="btn primary" @click="doSearch">查询</button>
@@ -14,7 +14,7 @@
     </div>
 
     <div class="hint">
-      查询支持 编码 / 电话 / 姓名（包含即命中）；点某条可修改；点绿色电话号可直接拨打；每页 7 条。
+      查询支持 编码 / 电话 / 姓名 / 省份（包含即命中）；每页 7 条，结果超过 7 条自动分页。
     </div>
 
     <div class="hint" v-if="searched">
@@ -26,6 +26,7 @@
         <div class="item-main">
           <div class="nm">{{ titleOf(c) }}</div>
           <div class="chips">
+            <span class="chip prov" v-if="c.province">{{ c.province }}</span>
             <span class="chip code" v-for="v in c.codes" :key="'c' + v">编码 {{ v }}</span>
             <span class="chip phone" v-for="v in c.phones" :key="'p' + v" @click.stop="call(v)" title="点击拨打">📞 {{ v }}</span>
             <span class="chip none" v-if="!c.codes.length && !c.phones.length">无编码/电话</span>
@@ -71,7 +72,8 @@ const result = computed(() => {
   const k = kwUsed.value.trim().toLowerCase()
   if (!k) return store.contacts
   return store.contacts.filter(c =>
-    [...(c.codes || []), ...(c.phones || []), c.name || ''].some(v => String(v).toLowerCase().includes(k))
+    [...(c.codes || []), ...(c.phones || []), c.name || '', c.province || '']
+      .some(v => String(v).toLowerCase().includes(k))
   )
 })
 

@@ -36,7 +36,7 @@ function applyRemote(data) {
 function snapshotPayload() {
   return {
     contacts: store.contacts.map(c => ({
-      id: c.id, name: c.name || '', codes: c.codes || [], phones: c.phones || [],
+      id: c.id, name: c.name || '', province: c.province || '', codes: c.codes || [], phones: c.phones || [],
       createdAt: c.createdAt || 0, updatedAt: c.updatedAt || 0,
     })),
     backups: store.backups.map(b => ({

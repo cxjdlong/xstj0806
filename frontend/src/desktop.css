@@ -215,3 +215,5 @@ body {
 .dl-btn.lg { padding: 12px 16px; font-size: 15px; font-weight: 600; }
 .dl-gate-row { display: flex; gap: 10px; justify-content: center; }
 .dl-gate-warn { margin-top: 12px; color: #b91c1c; font-size: 12.5px; }
+
+.dl-tag.prov { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }

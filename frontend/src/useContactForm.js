@@ -15,6 +15,7 @@ export function useContactForm(getEditId, onDone) {
   const codes = ref([''])
   const phones = ref([''])
   const name = ref('')
+  const province = ref('')
   const editingId = ref(null)
   const loaded = ref(null)      // 已载入的已存在记录（提交需确认覆盖）
   const addedCodes = ref([])    // 本次新输入的编码（相对已载入联系人）
@@ -42,6 +43,7 @@ export function useContactForm(getEditId, onDone) {
     codes.value = mergedC.length ? mergedC : ['']
     phones.value = mergedP.length ? mergedP : ['']
     name.value = c.name || ''
+    province.value = c.province || ''
     editingId.value = c.id
     loaded.value = info || null
     addedCodes.value = addC
@@ -54,6 +56,7 @@ export function useContactForm(getEditId, onDone) {
     codes.value = ['']
     phones.value = ['']
     name.value = ''
+    province.value = ''
     editingId.value = null
     loaded.value = null
     addedCodes.value = []
@@ -134,6 +137,7 @@ export function useContactForm(getEditId, onDone) {
     const cs = codes.value.map(s => String(s || '').trim()).filter(Boolean)
     const ps = phones.value.map(s => String(s || '').trim()).filter(Boolean)
     const nm = String(name.value || '').trim()
+    const pv = String(province.value || '').trim()
     if (!cs.length && !ps.length) {
       window.alert('请至少填写一个编码或一个电话号码。')
       return
@@ -149,9 +153,9 @@ export function useContactForm(getEditId, onDone) {
       const keep = freshCount.value
         ? `其中包含本次新输入的 ${[...addedCodes.value, ...addedPhones.value].join('、')}（将新增进去）\n\n`
         : ''
-      const msg = `${why}提交后【覆盖】联系人「${who}」的资料：\n\n${old}${keep}最终资料：编码 ${cs.join('、') || '无'} ／ 电话 ${ps.join('、') || '无'} ／ 姓名 ${nm || '（空）'}\n\n确认提交？`
+      const msg = `${why}提交后【覆盖】联系人「${who}」的资料：\n\n${old}${keep}最终资料：编码 ${cs.join('、') || '无'} ／ 电话 ${ps.join('、') || '无'} ／ 姓名 ${nm || '（空）'} ／ 省份 ${pv || '（空）'}\n\n确认提交？`
       if (!window.confirm(msg)) return
-      updateContact(editingId.value, { codes: cs, phones: ps, name: nm })
+      updateContact(editingId.value, { codes: cs, phones: ps, name: nm, province: pv })
       toast(`已覆盖修改「${nm || cs[0] || ps[0]}」`, 'ok')
     } else {
       const d = findDup(cs, ps, null)
@@ -159,10 +163,10 @@ export function useContactForm(getEditId, onDone) {
         const c = d.contact
         const msg = `${d.kind}「${d.value}」已存在（联系人：${titleOf(c)}）\n\n原资料：编码 ${(c.codes || []).join('、') || '无'} ／ 电话 ${(c.phones || []).join('、') || '无'} ／ 姓名 ${c.name || '（空）'}\n\n提交将【覆盖】该联系人的资料，确认提交？`
         if (!window.confirm(msg)) return
-        updateContact(c.id, { codes: cs, phones: ps, name: nm })
+        updateContact(c.id, { codes: cs, phones: ps, name: nm, province: pv })
         toast('已覆盖修改', 'ok')
       } else {
-        addContact({ codes: cs, phones: ps, name: nm })
+        addContact({ codes: cs, phones: ps, name: nm, province: pv })
         toast('已添加', 'ok')
       }
     }
@@ -171,7 +175,7 @@ export function useContactForm(getEditId, onDone) {
   }
 
   return {
-    codes, phones, name, editingId, loaded, addedCodes, addedPhones, freshCount,
+    codes, phones, name, province, editingId, loaded, addedCodes, addedPhones, freshCount,
     isRed, isFresh, onBlur, addRow, delRow, detach, clearAll, save,
   }
 }

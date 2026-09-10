@@ -180,3 +180,5 @@ body {
 }
 .toast.ok { background: rgba(5, 150, 105, .95); }
 .toast.warn { background: rgba(217, 119, 6, .95); }
+
+.chip.prov { background: #fff7ed; color: #9a3412; border-color: #fed7aa; }

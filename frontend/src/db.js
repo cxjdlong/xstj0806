@@ -29,6 +29,7 @@ function fixContact(c) {
     codes: normList(c.codes),
     phones: normList(c.phones),
     name: (c.name || '').trim(),
+    province: (c.province || '').trim(),
     createdAt: c.createdAt || Date.now(),
     updatedAt: c.updatedAt || c.createdAt || Date.now(),
   })
@@ -255,20 +256,21 @@ export function findDup(codes, phones, excludeId, opts = {}) {
   return null
 }
 
-export function addContact({ codes, phones, name }) {
+export function addContact({ codes, phones, name, province }) {
   const now = Date.now()
-  const c = markRaw({ id: uid(), codes: normList(codes), phones: normList(phones), name: (name || '').trim(), createdAt: now, updatedAt: now })
+  const c = markRaw({ id: uid(), codes: normList(codes), phones: normList(phones), name: (name || '').trim(), province: (province || '').trim(), createdAt: now, updatedAt: now })
   store.contacts.unshift(c)
   touchSave()
   return c
 }
 
-export function updateContact(id, { codes, phones, name }) {
+export function updateContact(id, { codes, phones, name, province }) {
   const c = store.contacts.find(x => x.id === id)
   if (!c) return null
   c.codes = normList(codes)
   c.phones = normList(phones)
   c.name = (name || '').trim()
+  c.province = (province || '').trim()
   c.updatedAt = Date.now()
   touchSave()
   return c
@@ -284,7 +286,7 @@ export function addContactsBulk(list) {
   const now = Date.now()
   const arr = list.map(x => markRaw({
     id: uid(), codes: normList(x.codes), phones: normList(x.phones),
-    name: (x.name || '').trim(), createdAt: now, updatedAt: now,
+    name: (x.name || '').trim(), province: (x.province || '').trim(), createdAt: now, updatedAt: now,
   }))
   store.contacts.unshift(...arr)
   touchSave()

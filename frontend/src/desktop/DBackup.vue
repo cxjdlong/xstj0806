@@ -219,6 +219,7 @@ function applyImport(rows) {
       hit.codes = normList([...(hit.codes || []), ...r.codes])
       hit.phones = normList([...(hit.phones || []), ...r.phones])
       if (r.name) hit.name = r.name
+      if (r.province) hit.province = r.province
       hit.updatedAt = Date.now()
       for (const v of [...hit.codes, ...hit.phones]) index.set(String(v), hit)
       upd++
