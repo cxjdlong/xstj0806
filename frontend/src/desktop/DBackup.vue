@@ -87,6 +87,7 @@ import { store, addBackup, removeBackup, replaceAll, snapshot, fmtTime, fmtStamp
 import { sheetToBase64, xlsxName, parseWorkbook } from '../excel.js'
 import { saveFile, deleteFile, exportDirLabel, saveTargetLabel, isApp } from '../native.js'
 import { dfState, saveBackupExcel, deleteBackupExcel } from '../dataFile.js'
+import { srv } from '../serverSync.js'
 import { toast } from '../toast.js'
 import DataFilePanel from './DataFilePanel.vue'
 
@@ -95,8 +96,8 @@ const page = ref(1)
 const busy = ref('')
 const lastPath = ref('')
 const fileEl = ref(null)
-const dirLabel = computed(() => dfState.connected ? (dfState.dirName + '/backup') : exportDirLabel())
-const targetLabel = computed(() => dfState.connected ? '数据库所在文件夹' : saveTargetLabel())
+const dirLabel = computed(() => srv.mode === 'server' ? '程序目录/backup' : (dfState.connected ? (dfState.dirName + '/backup') : exportDirLabel()))
+const targetLabel = computed(() => srv.mode === 'server' ? '程序目录 backup/' : (dfState.connected ? '数据库所在文件夹' : saveTargetLabel()))
 
 const totalPages = computed(() => Math.max(1, Math.ceil(store.backups.length / PAGE_SIZE)))
 const pageItems = computed(() => {
@@ -113,7 +114,18 @@ async function writeExcel(prefix) {
   const fileName = xlsxName(prefix, fmtStamp(Date.now()))
   const base64 = sheetToBase64(list, '通讯录')
   let path = ''
-  if (dfState.connected) {
+  if (srv.mode === 'server') {
+    // 本地版：直接 POST 给本机服务，落到程序目录 backup/
+    try {
+      const r = await fetch('/api/backup-xlsx', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: fileName, base64 }),
+      })
+      const j = await r.json()
+      if (j && j.ok) path = 'backup/' + j.name
+    } catch (e) { path = '' }
+  }
+  if (!path && dfState.connected) {
     // 已连接数据库文件 → 备份 Excel 存到 <html目录>/backup/
     try { path = await saveBackupExcel(fileName, base64) } catch (e) { path = '' }
   }
@@ -231,7 +243,9 @@ function restore(b) {
 function askDelete(b) {
   if (!window.confirm(`确认删除该备份？\n\n类型：${b.label}\n时间：${fmtTime(b.ts)}\n条数：${b.count}\n${b.path ? '文件：' + b.path + '\n' : ''}删除后不可恢复。`)) return
   if (b.path) {
-    if (dfState.connected) { deleteBackupExcel(b.path) } else { deleteFile(b.path) }
+    if (srv.mode === 'server') {
+      fetch('/api/backup-file?name=' + encodeURIComponent(String(b.path).split('/').pop()), { method: 'DELETE' }).catch(() => {})
+    } else if (dfState.connected) { deleteBackupExcel(b.path) } else { deleteFile(b.path) }
   }
   removeBackup(b.id)
   toast('备份已删除', 'ok')

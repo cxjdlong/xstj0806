@@ -196,3 +196,22 @@ body {
 .dl-df-warn { margin-top: 10px; color: #b91c1c; font-size: 12.6px; }
 
 .dl-ver { color: #b3b9c4; font-size: 11px; margin-top: 2px; }
+
+/* 连接数据文件夹：首屏引导层 */
+.dl-gate-mask {
+  position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center;
+  background: rgba(15, 23, 42, .45); backdrop-filter: blur(2px); padding: 20px;
+}
+.dl-gate {
+  width: 620px; max-width: 100%; background: #fff; border-radius: 14px; padding: 26px 28px 22px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, .28); text-align: center;
+}
+.dl-gate-ico { font-size: 34px; }
+.dl-gate h3 { margin: 8px 0 10px; font-size: 19px; }
+.dl-gate-txt { text-align: left; color: #374151; line-height: 1.85; font-size: 13.5px; }
+.dl-gate-txt code { background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 5px; padding: 0 6px; font-family: ui-monospace, Consolas, monospace; }
+.dl-gate-sub { color: var(--d-sub); font-size: 12.5px; margin-top: 10px; }
+.dl-gate-ops { margin-top: 18px; display: flex; flex-direction: column; gap: 10px; }
+.dl-btn.lg { padding: 12px 16px; font-size: 15px; font-weight: 600; }
+.dl-gate-row { display: flex; gap: 10px; justify-content: center; }
+.dl-gate-warn { margin-top: 12px; color: #b91c1c; font-size: 12.5px; }

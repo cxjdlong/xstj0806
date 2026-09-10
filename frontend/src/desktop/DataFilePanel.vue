@@ -34,6 +34,8 @@
         <button class="dl-btn" v-if="dfState.connected" @click="saveNow">立即写入</button>
         <button class="dl-btn ghost" v-if="dfState.connected" @click="off">断开（改回浏览器存储）</button>
         <button class="dl-btn ghost" @click="diagnose">写入自检（排查没生成文件）</button>
+        <button class="dl-btn" @click="exportDb">导出数据文件(.db)</button>
+        <button class="dl-btn" @click="pickDb">导入数据文件(.db)</button>
       </div>
       <div class="dl-df-warn" v-if="!dfState.supported">
         ⚠ 当前浏览器不支持直接读写文件（需 Chrome / Edge）。数据会继续存在浏览器存储里。
@@ -41,10 +43,12 @@
       <div class="dl-df-warn" v-if="dfState.lastError">⚠ 上次写入失败：{{ dfState.lastError }}</div>
     </div>
   </div>
+  <input ref="dbEl" class="dl-hidden" type="file" accept=".db,.sqlite,.sqlite3" @change="onDbFile" />
 </template>
 
 <script setup>
-import { dfState, pickFolder, grantAndConnect, writeNow, disconnect, selfTest, currentDirName, listBackupFiles } from '../dataFile.js'
+import { ref } from 'vue'
+import { dfState, pickFolder, grantAndConnect, writeNow, disconnect, selfTest, currentDirName, storeFromBytes, dumpBytesToBlob, importDbBytes } from '../dataFile.js'
 import { fmtTime } from '../db.js'
 
 const dirNameNow = currentDirName()
@@ -62,6 +66,44 @@ async function saveNow() {
   const ok = await writeNow(false)
   if (ok) toast('已写入数据库文件', 'ok')
 }
+const dbEl = ref(null)
+
+/** 导出 .db：任何浏览器都能用（走下载，不需要文件夹授权） */
+async function exportDb() {
+  try {
+    const blob = await dumpBytesToBlob()
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '').slice(0, 14)
+    const name = `contacts_${stamp}.db`
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 5000)
+    toast('已导出 ' + name + '（换浏览器/换电脑时用它一步还原）', 'ok', 4200)
+  } catch (e) {
+    window.alert('导出失败：' + e.message)
+  }
+}
+
+function pickDb() { if (dbEl.value) { dbEl.value.value = ''; dbEl.value.click() } }
+
+async function onDbFile(e) {
+  const f = e.target.files && e.target.files[0]
+  if (!f) return
+  if (!window.confirm(`用数据文件「${f.name}」覆盖当前数据？\n\n（当前 ${dfState.state && dfState.state.contacts ? '' : ''}条数会以文件为准）`)) return
+  try {
+    const buf = new Uint8Array(await f.arrayBuffer())
+    const n = await importDbBytes(buf)
+    toast(`已从数据文件载入 ${n} 条联系人`, 'ok', 4200)
+    window.alert(`导入成功：${n} 条联系人\n（数据文件已是当前数据源，后续改动会自动保存）`)
+  } catch (err) {
+    window.alert('导入失败：' + (err && err.message ? err.message : err))
+  }
+}
+
 function diagnose() {
   selfTest().then(r => window.alert('自检结果：\n\n' + r)).catch(e => window.alert('自检异常：' + e.message))
 }

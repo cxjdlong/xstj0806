@@ -80,6 +80,27 @@ meta    (k TEXT PRIMARY KEY, v TEXT)
 - **导入建索引 O(1) 匹配**：先建「编码/电话 → 联系人」索引，再批量插入，避免逐条 O(n) 扫描。
 - **备份上限 30 条**；数据量 > 5000 时只保留最近 5 条完整快照，其余只留记录（提示用 Excel 恢复）。
 
+
+## 本地版（推荐：双击就用，数据在 db 文件夹，零授权点击）
+纯 html 受浏览器安全限制无法自己读写磁盘，所以想做到「双击就用 + 数据固定存在 db/contacts.db + 换浏览器不影响」就需要一个**本地小程序**：
+
+```
+通讯录本地版/
+├── 启动.bat            ← 双击启动服务并自动打开浏览器（需要 Python 3）
+├── 打包exe.bat         ← 双击一键打包成 contacts.exe（以后无需 Python）
+├── contacts_local.py   ← 本地服务（纯 Python 标准库：静态页 + REST + SQLite）
+├── 通讯录.html          ← 界面（与 index.html 同一份）
+├── index.html
+├── 使用说明.txt
+├── db/contacts.db      ← 数据（首次启动自动创建）
+└── backup/             ← 全部备份的 xlsx + 每天一份 .db 快照
+```
+
+- 打开地址 `http://127.0.0.1:19118`（端口被占用自动换）；浏览器里显示「🌐 本地版 · db/contacts.db」。
+- 前端自动识别：http 打开且 `/api/health` 有响应 → 走本地服务模式（无授权、无引导）；`file://` 双击 html → 走原来的浏览器存储 + 可选文件夹模式。
+- 接口：`GET /api/health`、`GET /api/db`、`PUT /api/db`、`GET /api/info`、`POST /api/backup-xlsx`、`GET /api/backup-files`、`DELETE /api/backup-file?name=`。
+- 打包好的压缩包：`/vol2/1000/ai-projects/drop/通讯录本地版.zip`
+
 ## 电脑网页版（桌面程序界面 · 单文件 HTML）
 电脑版**不是手机界面照搬**，而是独立的桌面网页应用：顶栏 + 左侧导航（通讯录 / 添加·修改 / 备份·导入）+ 表格化内容区，不做手机适配。
 

@@ -183,7 +183,20 @@ export function resumeSave() {
   if (!pauseCount) queueSave(60)
 }
 
+const changeListeners = new Set()
+
+/** 注册数据变更回调（本地服务版用它同步到 db 文件） */
+export function onStoreChange(fn) {
+  changeListeners.add(fn)
+  return () => changeListeners.delete(fn)
+}
+
+function notifyChange() {
+  for (const fn of changeListeners) { try { fn() } catch (e) { /* 忽略 */ } }
+}
+
 function queueSave(delay = 500) {
+  notifyChange()
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(() => { saveTimer = null; if (!pauseCount) saveNow() }, delay)
 }

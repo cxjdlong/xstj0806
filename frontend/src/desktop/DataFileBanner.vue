@@ -1,13 +1,13 @@
 <template>
-  <div class="dl-banner" v-if="showBanner">
+  <div class="dl-banner warn" v-if="showBanner">
     <div class="dl-banner-txt">
-      <b>数据存放位置</b>：现在数据存在浏览器里。可以把数据改成存在 <b>本 html 同目录</b> 的
-      <code>{{ dfState.fileName }}</code>，这样文件夹拷到哪、数据就跟到哪。
-      <span class="dl-muted">（首次需选一次 html 所在的文件夹，之后自动读写）</span>
+      ⚠️ <b>还没连接数据文件夹</b>：现在数据只存在<b>这个浏览器</b>里 —— 换浏览器、清缓存、换电脑就看不到。
+      连一次 <b>本 html 所在文件夹</b>，数据就会写进 <code>db/{{ dfState.fileName }}</code>，文件夹到哪数据到哪。
+      <span class="dl-muted">（只需首次点一下选文件夹；浏览器的安全限制，网页不能自己读写磁盘）</span>
     </div>
     <div class="dl-banner-ops">
       <button class="dl-btn primary" :disabled="dfState.busy" @click="connect">{{ dfState.busy ? '处理中…' : '选择 html 所在文件夹' }}</button>
-      <button class="dl-btn ghost" @click="dismiss">暂不，继续用浏览器存储</button>
+      <button class="dl-btn ghost" @click="dismiss">本次先不连</button>
     </div>
   </div>
 </template>
@@ -17,7 +17,7 @@ import { computed, ref } from 'vue'
 import { dfState, pickFolder, grantAndConnect } from '../dataFile.js'
 import { toast } from '../toast.js'
 
-const DISMISS_KEY = 'contacts_df_banner_dismissed'
+const DISMISS_KEY = 'contacts_df_banner_hidden_once'
 const dismissed = ref(localStorage.getItem(DISMISS_KEY) === '1')
 
 const showBanner = computed(() => dfState.supported && !dfState.connected && !dismissed.value)

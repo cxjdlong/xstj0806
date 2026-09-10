@@ -210,6 +210,26 @@ function b64ToBytes(b64) {
   return out
 }
 
+/** 导出当前数据为 .db 字节的 Blob（不需要文件夹授权，任何浏览器可用） */
+export async function dumpBytesToBlob() {
+  await ensureSql()
+  const db = dbFromStore()
+  const bytes = db.export()
+  db.close()
+  return new Blob([bytes], { type: 'application/x-sqlite3' })
+}
+
+/** 导入 .db 字节：覆盖当前数据，并立即落库（已连接则同时写回文件夹） */
+export async function importDbBytes(bytes) {
+  await ensureSql()
+  const parsed = storeFromBytes(bytes)
+  applyToStore(parsed)
+  const { saveNowForce } = await import('./db.js')
+  saveNowForce()
+  if (dfState.connected) await writeNow(false)
+  return parsed.contacts.length
+}
+
 /** 备份 Excel 落到 <html目录>/backup/，返回展示用路径 */
 export async function saveBackupExcel(fileName, base64) {
   if (!dfState.connected || !dirHandle) return ''
