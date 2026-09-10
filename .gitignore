@@ -15,3 +15,6 @@ android/captures/
 # 系统
 .DS_Store
 Thumbs.db
+
+# 图标源文件(8000px 原图不入库, 由 icon/icon-512.png 或原图重新生成)
+icon/*.png.png
