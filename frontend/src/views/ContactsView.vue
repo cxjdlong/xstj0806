@@ -6,7 +6,7 @@
         v-model="kw"
         class="search-input"
         type="search"
-        placeholder="输入编码或电话（包含即查询）"
+        placeholder="输入编码 / 电话 / 姓名（包含即查询）"
         @keyup.enter="doSearch"
       />
       <button class="btn primary" @click="doSearch">查询</button>
@@ -14,7 +14,7 @@
     </div>
 
     <div class="hint">
-      点某条可修改；点绿色电话号可直接拨打；每页 7 条。
+      查询支持 编码 / 电话 / 姓名（包含即命中）；点某条可修改；点绿色电话号可直接拨打；每页 7 条。
     </div>
 
     <div class="hint" v-if="searched">
@@ -65,13 +65,13 @@ const kwUsed = ref('')
 const searched = ref(false)
 const page = ref(1)
 
-/** 编码或电话 只要「包含」关键字就命中 */
+/** 编码 / 电话 / 姓名 只要「包含」关键字就命中 */
 const result = computed(() => {
   if (!searched.value) return store.contacts
   const k = kwUsed.value.trim().toLowerCase()
   if (!k) return store.contacts
   return store.contacts.filter(c =>
-    [...(c.codes || []), ...(c.phones || [])].some(v => String(v).toLowerCase().includes(k))
+    [...(c.codes || []), ...(c.phones || []), c.name || ''].some(v => String(v).toLowerCase().includes(k))
   )
 })
 
