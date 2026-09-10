@@ -5,17 +5,11 @@
       <span class="tag-mod" v-if="editingId">修改模式</span>
     </div>
 
-    <!-- 已载入已存在联系人：提交将覆盖 -->
+    <!-- 光标移出输入框后判定到重复：已载入现有资料，提交需确认覆盖 -->
     <div class="dupbanner" v-if="loaded">
       ⚠ {{ loaded.kind }}「{{ loaded.value }}」已存在（联系人：{{ titleOf(loaded.contact) }}），
       已载入其现有资料，<b>提交将覆盖修改</b>
       <button class="btn ghost sm" @click="detach">改为新增</button>
-    </div>
-    <!-- 打字过程中的软提示：只提示不打断，点按钮才载入 -->
-    <div class="duphint" v-else-if="hint">
-      ⚠ {{ hint.kind }}「{{ hint.value }}」已存在（联系人：{{ titleOf(hint.contact) }}）
-      <button class="btn ghost sm" @click="loadHint">载入现有资料修改</button>
-      <div class="duphint-tip">可继续填写：离开本页或提交时会自动载入并让你确认覆盖。</div>
     </div>
 
     <!-- 段1：编码（默认1个，+/− 增减） -->
@@ -29,7 +23,6 @@
           v-model="codes[i]"
           type="text"
           :placeholder="'请输入编码' + (i + 1)"
-          @focus="cancelAutoLoad"
           @blur="onBlur"
         />
         <button class="op add" @click="addRow(codes)" title="增加一个编码">＋</button>
@@ -48,7 +41,6 @@
           v-model="phones[i]"
           type="tel"
           :placeholder="'请输入电话号码' + (i + 1)"
-          @focus="cancelAutoLoad"
           @blur="onBlur"
         />
         <button class="op add" @click="addRow(phones)" title="增加一个电话">＋</button>
@@ -71,7 +63,7 @@
     </div>
     <div class="tip">
       规则：编码/电话默认各 1 个，点「＋」可增加输入框，2 个以上出现「－」可减少；姓名可不填。<br />
-      查重：输入过程中<b>只提示不打断</b>；离开输入框或提交时若编码/电话已存在，会自动载入该联系人资料并要求你确认后再覆盖。
+      查重：<b>光标移出输入框时</b>才判定；若编码/电话已存在，自动载入该联系人现有资料（进入修改模式），提交时会二次确认后再覆盖。
     </div>
   </div>
 </template>
@@ -88,12 +80,9 @@ const codes = ref([''])
 const phones = ref([''])
 const name = ref('')
 const editingId = ref(null)
-const loaded = ref(null)   // 已载入的已存在记录（提交需确认）
-const hint = ref(null)     // 仅提示（未载入）
+const loaded = ref(null)   // 已载入的已存在记录（提交需确认覆盖）
 
-let suppress = false       // 载入时抑制查重自触发
-let timer = null           // 打字防抖
-let blurTimer = null       // 失焦后的自动载入延迟（期间有本表单交互则取消）
+let suppress = false       // 载入时抑制（防止 blur 事件连锁重复判定）
 
 function loadFromContact(c, info) {
   suppress = true
@@ -102,13 +91,11 @@ function loadFromContact(c, info) {
   name.value = c.name || ''
   editingId.value = c.id
   loaded.value = info || null
-  hint.value = null
-  setTimeout(() => { suppress = false }, 60)
+  setTimeout(() => { suppress = false }, 80)
 }
 
 function loadEdit(id) {
   loaded.value = null
-  hint.value = null
   if (!id) { resetFields(); return }
   const c = store.contacts.find(x => x.id === id)
   if (!c) { resetFields(); return }
@@ -124,17 +111,14 @@ function resetFields() {
   name.value = ''
   editingId.value = null
   loaded.value = null
-  hint.value = null
-  setTimeout(() => { suppress = false }, 60)
+  setTimeout(() => { suppress = false }, 80)
 }
 
 function addRow(arr) {
-  cancelAutoLoad()
   arr.push('')
 }
 
 function delRow(arr, i) {
-  cancelAutoLoad()
   const v = arr[i]
   const rest = arr.filter((x, k) => k !== i).some(x => String(x).trim())
   if (String(v || '').trim() && rest) {
@@ -145,44 +129,23 @@ function delRow(arr, i) {
 }
 
 function isRed(v) {
-  const d = loaded.value || hint.value
+  const d = loaded.value
   if (!d) return false
   return String(v || '').trim() === String(d.value).trim()
 }
 
-/** 打字防抖：只做“提示”，绝不改表单，避免打断输入 */
-watch([codes, phones], () => {
+/**
+ * 唯一判定时机：光标移出当前输入框（blur）。
+ * 打字过程中不做任何判定、不改表单；命中已存在 → 直接载入现有资料 + 标红 + 提交二次确认。
+ */
+function onBlur(e) {
   if (suppress) return
-  if (timer) clearTimeout(timer)
-  timer = setTimeout(() => {
-    hint.value = findDup(codes.value, phones.value, editingId.value || null)
-  }, 450)
-}, { deep: true })
-
-/** 失焦后延迟自动载入：若这段时间内用户还在本表单里操作(点＋/点另一个框/点保存)，就取消 */
-function onBlur() {
-  if (blurTimer) clearTimeout(blurTimer)
-  blurTimer = setTimeout(() => {
-    blurTimer = null
-    const h = hint.value
-    if (h && h.contact.id !== editingId.value) {
-      loadFromContact(h.contact, h)
-      toast(`${h.kind}「${h.value}」已存在，已载入现有资料`, 'warn', 3200)
-    }
-  }, 320)
-}
-
-function cancelAutoLoad() {
-  if (blurTimer) { clearTimeout(blurTimer); blurTimer = null }
-}
-
-/** 从提示条手动载入 */
-function loadHint() {
-  const h = hint.value
-  if (h) {
-    loadFromContact(h.contact, h)
-    toast(`已载入「${titleOf(h.contact)}」的资料，修改后提交将覆盖`, 'warn', 3200)
-  }
+  const v = String(e && e.target && e.target.value ? e.target.value : '').trim()
+  if (!v) return
+  const d = findDup(codes.value, phones.value, editingId.value || null)
+  if (!d) return
+  loadFromContact(d.contact, d)
+  toast(`${d.kind}「${d.value}」已存在，已载入现有资料，提交将覆盖`, 'warn', 3400)
 }
 
 /** 脱离修改模式：当前填写当作新增 */
@@ -190,21 +153,15 @@ function detach() {
   editingId.value = null
   loaded.value = null
   toast('已改为新增：提交将新建一条联系人', 'info', 2600)
-  hint.value = findDup(codes.value, phones.value, null)
 }
 
-onBeforeUnmount(() => {
-  if (timer) clearTimeout(timer)
-  if (blurTimer) clearTimeout(blurTimer)
-})
+onBeforeUnmount(() => {})
 
 function clearAll() {
-  cancelAutoLoad()
   resetFields()
 }
 
 function save() {
-  cancelAutoLoad()
   const cs = codes.value.map(s => String(s || '').trim()).filter(Boolean)
   const ps = phones.value.map(s => String(s || '').trim()).filter(Boolean)
   const nm = String(name.value || '').trim()
