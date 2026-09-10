@@ -8,6 +8,7 @@ import { viteSingleFile } from 'vite-plugin-singlefile'
 export default defineConfig({
   plugins: [vue(), viteSingleFile()],
   base: './',
+  define: { __BUILD_TIME__: JSON.stringify(new Date().toISOString().slice(0, 19).replace('T', ' ')) },
   build: {
     outDir: 'dist-web',
     rollupOptions: {

@@ -14,10 +14,12 @@
  */
 import { reactive } from 'vue'
 import { store } from './db.js'
+import { toast } from './toast.js'
 import initSqlJs from 'sql.js/dist/sql-wasm.js'
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
 
-const FILE_NAME = '通讯录数据.db'
+const FILE_NAME = 'contacts.db'      // 数据库文件名（ASCII，避免中文名在部分环境出问题）
+const LEGACY_DB = '通讯录数据.db'      // 旧中文名，读取时兼容
 const DB_SUBDIR = 'db'          // 数据库放在 <html目录>/db/
 const BACKUP_SUBDIR = 'backup'  // 备份 Excel 放在 <html目录>/backup/
 const LEGACY_JSON = '通讯录数据.json'
@@ -181,14 +183,16 @@ async function subDir(root, name, create = true) {
 }
 
 async function readBytes(root) {
-  try {
-    const dir = await subDir(root, DB_SUBDIR, false)
-    const fh = await dir.getFileHandle(FILE_NAME, { create: false })
-    const buf = await (await fh.getFile()).arrayBuffer()
-    return new Uint8Array(buf)
-  } catch (e) {
-    return null
+  const dir = await (async () => { try { return await subDir(root, DB_SUBDIR, false) } catch (e) { return null } })()
+  if (!dir) return null
+  for (const name of [FILE_NAME, LEGACY_DB]) {
+    try {
+      const fh = await dir.getFileHandle(name, { create: false })
+      const buf = await (await fh.getFile()).arrayBuffer()
+      if (buf && buf.byteLength > 0) return new Uint8Array(buf)
+    } catch (e) { /* 试下一个 */ }
   }
+  return null
 }
 
 async function writeBytes(root, bytes) {
@@ -277,6 +281,10 @@ export async function writeNow(silent = true) {
     return true
   } catch (e) {
     dfState.lastError = String(e && e.message ? e.message : e)
+    if (dfState.lastError !== dfState._lastToasted) {
+      dfState._lastToasted = dfState.lastError
+      toast('写入数据库文件失败：' + dfState.lastError, 'warn', 6000)
+    }
     if (!silent) window.alert('写入数据库文件失败：' + dfState.lastError)
     return false
   }
@@ -375,6 +383,52 @@ export async function restoreFromStore() {
       dfState.needGrant = true
     }
   } catch (e) { /* 忽略 */ }
+}
+
+/**
+ * 写入自检：逐步验证「建目录 / 写文件 / 读回 / 删文件」，返回可读报告。
+ * 用户排查「没创建文件」时点一下即可定位。
+ */
+export async function selfTest() {
+  const lines = []
+  lines.push('浏览器支持 direct 读写: ' + (supported ? '是' : '否（需 Chrome / Edge）'))
+  if (!supported) return lines.join('\n')
+  lines.push('已连接文件夹: ' + (dfState.connected ? ('是 → ' + dfState.dirName) : '否（需先点「选择 html 所在文件夹」授权）'))
+  if (!dfState.connected || !dirHandle) return lines.join('\n')
+  try {
+    const p = await dirHandle.queryPermission({ mode: 'readwrite' })
+    lines.push('文件夹权限: ' + p + (p === 'granted' ? '（可读写）' : '（需点「授权并连接」或重选文件夹）'))
+    if (p !== 'granted') return lines.join('\n')
+  } catch (e) {
+    lines.push('权限查询失败: ' + e.message)
+  }
+  try {
+    await ensureSql()
+    lines.push('SQLite 引擎: 正常')
+  } catch (e) {
+    lines.push('SQLite 引擎初始化失败: ' + e.message)
+    return lines.join('\n')
+  }
+  try {
+    const dbd = await subDir(dirHandle, DB_SUBDIR, true)
+    const bd = await subDir(dirHandle, BACKUP_SUBDIR, true)
+    lines.push('目录: ' + dfState.dirName + '/' + DB_SUBDIR + ' 、 ' + dfState.dirName + '/' + BACKUP_SUBDIR + ' —— 已就绪')
+    // 写测试文件
+    const fh = await dbd.getFileHandle('__写入自检.txt', { create: true })
+    const w = await fh.createWritable()
+    await w.write(new TextEncoder().encode('ok'))
+    await w.close()
+    const back = await (await dbd.getFileHandle('__写入自检.txt')).getFile()
+    const txt = await back.text()
+    lines.push('写/读测试文件: ' + (txt === 'ok' ? '成功' : '内容异常'))
+    await dbd.removeEntry('__写入自检.txt')
+    lines.push('删除测试文件: 成功')
+    const ok = await writeNow(false)
+    lines.push('写数据库文件(' + DB_SUBDIR + '/' + FILE_NAME + '): ' + (ok ? ('成功，用时 ' + dfState.dbMs + 'ms') : ('失败 → ' + (dfState.lastError || '未知'))))
+  } catch (e) {
+    lines.push('出错: ' + (e && e.message ? e.message : e) + (e && e.name ? '（' + e.name + '）' : ''))
+  }
+  return lines.join('\n')
 }
 
 export function disconnect() {

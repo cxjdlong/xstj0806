@@ -194,3 +194,5 @@ body {
 .dl-df-desc { color: var(--d-sub); font-size: 12.6px; line-height: 1.8; margin: 8px 0 12px; }
 .dl-df-ops { display: flex; gap: 8px; flex-wrap: wrap; }
 .dl-df-warn { margin-top: 10px; color: #b91c1c; font-size: 12.6px; }
+
+.dl-ver { color: #b3b9c4; font-size: 11px; margin-top: 2px; }

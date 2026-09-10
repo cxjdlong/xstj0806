@@ -20,6 +20,12 @@
         下次双击 html 打开会自动读回，<b>文件夹拷到别的电脑数据一起带走</b>。
         （浏览器安全策略要求首次手选一次文件夹；Chrome/Edge 会记住位置。）
       </div>
+      <div class="dl-df-note">
+        本页面所在文件夹：<b>{{ dirNameNow }}</b>
+        <template v-if="dfState.connected && dfState.dirName && dfState.dirName !== dirNameNow">
+          　⚠ 与已连接的文件夹「<b>{{ dfState.dirName }}</b>」不同 —— 数据正写在那个文件夹里，不是当前这个。
+        </template>
+      </div>
       <div class="dl-df-ops">
         <button v-if="!dfState.connected && dfState.needGrant" class="dl-btn primary" :disabled="dfState.busy" @click="grant">授权并连接</button>
         <button class="dl-btn" :class="{ primary: !dfState.connected }" :disabled="dfState.busy" @click="pick">
@@ -27,6 +33,7 @@
         </button>
         <button class="dl-btn" v-if="dfState.connected" @click="saveNow">立即写入</button>
         <button class="dl-btn ghost" v-if="dfState.connected" @click="off">断开（改回浏览器存储）</button>
+        <button class="dl-btn ghost" @click="diagnose">写入自检（排查没生成文件）</button>
       </div>
       <div class="dl-df-warn" v-if="!dfState.supported">
         ⚠ 当前浏览器不支持直接读写文件（需 Chrome / Edge）。数据会继续存在浏览器存储里。
@@ -37,8 +44,10 @@
 </template>
 
 <script setup>
-import { dfState, pickFolder, grantAndConnect, writeNow, disconnect } from '../dataFile.js'
+import { dfState, pickFolder, grantAndConnect, writeNow, disconnect, selfTest, currentDirName, listBackupFiles } from '../dataFile.js'
 import { fmtTime } from '../db.js'
+
+const dirNameNow = currentDirName()
 import { toast } from '../toast.js'
 
 async function pick() {
@@ -53,6 +62,10 @@ async function saveNow() {
   const ok = await writeNow(false)
   if (ok) toast('已写入数据库文件', 'ok')
 }
+function diagnose() {
+  selfTest().then(r => window.alert('自检结果：\n\n' + r)).catch(e => window.alert('自检异常：' + e.message))
+}
+
 function off() {
   if (!window.confirm('确认断开？断开后数据只存在浏览器里（不会删除已生成的数据库文件）。')) return
   disconnect()

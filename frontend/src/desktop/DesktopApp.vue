@@ -19,8 +19,9 @@
           <span class="dl-nav-ico">{{ t.ico }}</span>{{ t.n }}
         </button>
         <div class="dl-side-foot">
-          <div>{{ dfState.connected ? '数据：html 同目录文件' : '数据：本地数据库' }}</div>
+          <div>{{ dfState.connected ? '数据：db/contacts.db' : '数据：本地数据库' }}</div>
           <div>建议定期「全部备份」</div>
+          <div class="dl-ver">版本 v{{ APP_VERSION }} · {{ BUILD_TIME }}</div>
         </div>
       </nav>
 
@@ -48,6 +49,7 @@ import DataFileBanner from './DataFileBanner.vue'
 import { store, saveNowForce } from '../db.js'
 import { toasts } from '../toast.js'
 import { dfState, restoreFromStore, shouldWrite, writeNow } from '../dataFile.js'
+import { APP_VERSION, BUILD_TIME } from '../version.js'
 
 const tabs = [
   { k: 'contacts', n: '通讯录', ico: '📇' },
