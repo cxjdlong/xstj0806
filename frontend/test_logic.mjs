@@ -63,5 +63,15 @@ for (const r of incoming) {
 }
 ok('更新2条/新增1条', add === 1 && upd === 2)
 
+console.log('【6】打字防误判：过短的值不触发查重')
+store.contacts.splice(0, store.contacts.length)
+addContact({ codes: ['12'], phones: ['138'], name: '短值' })
+addContact({ codes: ['C100'], phones: ['13911112222'], name: '正常' })
+ok('短编码(2位)不命中', findDup(['12'], [''], null) === null)
+ok('短电话(3位)不命中', findDup([''], ['138'], null) === null)
+ok('等长编码命中', findDup(['C100'], [''], null) !== null)
+ok('前缀不命中(必须完整)', findDup(['C10'], [''], null) === null)
+ok('打字到一半不命中、补全后命中', findDup(['1391'], [''], null) === null && findDup([''], ['13911112222'], null) !== null)
+
 console.log(`\n结果：通过 ${pass}，失败 ${fail}`)
 process.exit(fail ? 1 : 0)

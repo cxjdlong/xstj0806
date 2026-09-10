@@ -122,6 +122,14 @@ body {
   background: #fef2f2; border: 1px solid #fecaca; color: var(--red);
   border-radius: 10px; padding: 10px 12px; font-size: 13.5px; line-height: 1.5; margin-bottom: 12px;
 }
+.dupbanner .btn { margin-top: 8px; }
+
+.duphint {
+  background: #fffbeb; border: 1px solid #fde68a; color: #92400e;
+  border-radius: 10px; padding: 10px 12px; font-size: 13.5px; line-height: 1.6; margin-bottom: 12px;
+}
+.duphint .btn { margin-top: 8px; }
+.duphint-tip { color: #a16207; font-size: 12.5px; margin-top: 6px; }
 
 .seg { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
 .seg-hd { font-size: 14.5px; font-weight: 700; margin-bottom: 8px; }

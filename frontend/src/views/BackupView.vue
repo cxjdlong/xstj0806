@@ -6,12 +6,11 @@
     </div>
 
     <div class="bk-btns">
-      <button class="btn primary" @click="fullExport">完全导出</button>
-      <button class="btn ok" @click="fullBackup">全部备份</button>
+      <button class="btn primary" @click="fullBackup">全部备份</button>
       <button class="btn warn" @click="pickImport">完全导入</button>
     </div>
     <div class="tip">
-      「完全导出」= 导出 Excel 到手机（显示路径，不建快照）；「全部备份」= 导出 Excel + 本地快照（列表可恢复）；「完全导入」= 选 Excel 导入，<b>导入前自动备份一次</b>当前数据。
+      「全部备份」= 把全部联系人备份成 Excel 存到手机（<b>显示保存路径</b>），同时记入下面的备份列表（可恢复/删除）；「完全导入」= 选 Excel 导入，<b>导入前自动备份一次</b>当前数据，按编码/电话匹配 → 已存在则更新、否则新增。
     </div>
 
     <div class="lastpath" v-if="lastPath">
@@ -89,20 +88,12 @@ function writeExcel(prefix) {
   return { fileName, path, list }
 }
 
-/** 完全导出：仅导出 Excel 到手机并显示路径 */
-function fullExport() {
-  const r = writeExcel('通讯录_完全导出')
-  if (!r) return
-  window.alert(`完全导出成功！\n\n文件：${r.fileName}\n条数：${r.list.length}\n路径：${r.path}`)
-  toast('完全导出完成，路径已显示', 'ok')
-}
-
-/** 全部备份：导出 Excel + 本地快照（备份列表可恢复） */
+/** 全部备份：Excel 落手机 + 记一条备份（备份列表可恢复/删除），路径直接显示 */
 function fullBackup() {
   const r = writeExcel('通讯录_全部备份')
   if (!r) return
   const rec = addBackup({ label: '全部备份', fileName: r.fileName, path: r.path, data: r.list })
-  window.alert(`全部备份完成！\n\n文件：${r.fileName}\n条数：${r.list.length}\n路径：${r.path}\n（已加入备份列表，可恢复/删除）`)
+  window.alert(`全部备份成功！\n\n文件：${r.fileName}\n条数：${r.list.length}\n路径：${r.path}\n（已记入备份列表，可恢复/删除）`)
   toast(`已备份 ${rec.count} 条`, 'ok')
   page.value = 1
 }

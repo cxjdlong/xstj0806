@@ -89,10 +89,14 @@ export function findByAny(list, values, excludeId) {
 /**
  * 添加表单查重：返回首个命中的已存在联系人 + 命中明细。
  * 命中即「载入现有数据 → 用户改 → 提交确认（覆盖）」。
+ * 为避免打字中途误命中：编码至少 3 位、电话至少 5 位才参与判定（可传 opts 覆盖）。
  */
-export function findDup(codes, phones, excludeId) {
-  const cs = normList(codes)
-  const ps = normList(phones)
+export function findDup(codes, phones, excludeId, opts = {}) {
+  const codeMin = opts.codeMin == null ? 3 : opts.codeMin
+  const phoneMin = opts.phoneMin == null ? 5 : opts.phoneMin
+  const long = (v, n) => String(v || '').trim().length >= n
+  const cs = normList(codes).filter(v => long(v, codeMin))
+  const ps = normList(phones).filter(v => long(v, phoneMin))
   for (const c of store.contacts) {
     if (excludeId && c.id === excludeId) continue
     for (const v of cs) {
