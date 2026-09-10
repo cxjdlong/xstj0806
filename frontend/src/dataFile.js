@@ -1,17 +1,26 @@
 /**
- * 数据文件（桌面网页版专用）：把数据存成 **和 html 同目录** 的 `通讯录数据.json`。
+ * 数据文件（桌面网页版专用）：把数据存成 **和 html 同目录** 的 `通讯录数据.db`
+ * —— **真正的 SQLite 数据库文件**（能被 DB Browser for SQLite 等工具直接打开）。
  *
- * 为什么需要一次点击授权：浏览器安全策略不允许 file:// 页面静默读写磁盘，
- * 所以第一次要你「选一次 html 所在文件夹」（Chrome/Edge 会记住上次选的目录，之后就自动了）。
- * 句柄存在 IndexedDB 里，下次打开自动重连；若浏览器要求重新授权，页面上点一下「授权并连接」即可。
+ * 结构：
+ *   contacts(id, name, codes, phones, created_at, updated_at)   codes/phones 为 JSON 数组文本
+ *   backups (id, ts, label, file_name, path, count)
  *
- * 未连接时：仍用浏览器本地存储（localStorage），功能不受影响。
+ * 工作方式（离线、无服务端）：
+ *   ① 浏览器 IndexedDB 仍是运行时主存储（快）；
+ *   ② 每次改动（防抖 1s）把内存数据整体写入这个 .db 文件 → 文件夹拷到哪、数据跟到哪；
+ *   ③ 首次需点一次「选择 html 所在文件夹」授权（浏览器安全要求），之后自动读写。
+ *   旧版 `通讯录数据.json` 会被自动识别并迁移成 .db。
  */
 import { reactive } from 'vue'
 import { store } from './db.js'
+import initSqlJs from 'sql.js/dist/sql-wasm.js'
+import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
 
-const FILE_NAME = '通讯录数据.json'
-const LEGACY = '通讯录数据.json'
+const FILE_NAME = '通讯录数据.db'
+const DB_SUBDIR = 'db'          // 数据库放在 <html目录>/db/
+const BACKUP_SUBDIR = 'backup'  // 备份 Excel 放在 <html目录>/backup/
+const LEGACY_JSON = '通讯录数据.json'
 const IDB_NAME = 'contacts_fs'
 const IDB_STORE = 'kv'
 const IDB_KEY = 'dirHandle'
@@ -26,13 +35,15 @@ export const dfState = reactive({
   busy: false,
   lastSaved: 0,
   lastError: '',
-  needGrant: false,   // 已记住文件夹，但本次会话需要再点一下授权
+  needGrant: false,
+  dbMs: 0,
 })
 
 let dirHandle = null
+let SQL = null
 let suppressWrite = false
 
-/* ---------------- IndexedDB 存取句柄 ---------------- */
+/* ---------------- IndexedDB 存目录句柄 ---------------- */
 function idb() {
   return new Promise((res, rej) => {
     const r = indexedDB.open(IDB_NAME, 1)
@@ -69,74 +80,209 @@ async function idbDel(key) {
   })
 }
 
-/* ---------------- 数据打包/落地 ---------------- */
-export function pack() {
-  // 文件里只存联系人 + 备份的「记录」（不含快照 data），保证万级数据下文件小、写入快。
-  // 快照留在本地数据库(IndexedDB)里，文件用于跨电脑携带 + 长期归档。
-  return {
-    app: '通讯录',
-    version: 2,
-    savedAt: Date.now(),
-    contacts: JSON.parse(JSON.stringify(store.contacts)),
-    backups: store.backups.map(b => ({
-      id: b.id, ts: b.ts, label: b.label, fileName: b.fileName, path: b.path,
-      count: b.count, noSnapshot: !!b.noSnapshot,
-    })),
-  }
+/* ---------------- SQLite ---------------- */
+async function ensureSql() {
+  if (SQL) return SQL
+  SQL = await initSqlJs({ locateFile: () => wasmUrl })
+  return SQL
 }
 
-function apply(obj) {
-  suppressWrite = true
+const SCHEMA = `
+CREATE TABLE IF NOT EXISTS contacts (
+  id TEXT PRIMARY KEY, name TEXT, codes TEXT, phones TEXT,
+  created_at INTEGER, updated_at INTEGER
+);
+CREATE TABLE IF NOT EXISTS backups (
+  id TEXT PRIMARY KEY, ts INTEGER, label TEXT,
+  file_name TEXT, path TEXT, count INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_contacts_name ON contacts(name);
+CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
+`
+
+function newDb() {
+  const db = new SQL.Database()
+  db.run(SCHEMA)
+  return db
+}
+
+/** 内存数据 → SQLite（整体重建，保证文件与界面一致） */
+function dbFromStore() {
+  const db = newDb()
+  db.run('BEGIN')
+  const insC = db.prepare('INSERT INTO contacts (id,name,codes,phones,created_at,updated_at) VALUES (?,?,?,?,?,?)')
+  for (const c of store.contacts) {
+    insC.run([c.id, c.name || '', JSON.stringify(c.codes || []), JSON.stringify(c.phones || []), c.createdAt || 0, c.updatedAt || 0])
+  }
+  insC.free()
+  const insB = db.prepare('INSERT INTO backups (id,ts,label,file_name,path,count) VALUES (?,?,?,?,?,?)')
+  for (const b of store.backups) {
+    insB.run([b.id, b.ts || 0, b.label || '', b.fileName || '', b.path || '', b.count || 0])
+  }
+  insB.free()
+  db.run('INSERT OR REPLACE INTO meta (k,v) VALUES (?,?)', ['app', '通讯录'])
+  db.run('INSERT OR REPLACE INTO meta (k,v) VALUES (?,?)', ['version', '1'])
+  db.run('INSERT OR REPLACE INTO meta (k,v) VALUES (?,?)', ['savedAt', String(Date.now())])
+  db.run('COMMIT')
+  return db
+}
+
+/** SQLite 字节 → 内存 */
+function storeFromBytes(bytes) {
+  const db = new SQL.Database(bytes)
+  const out = { contacts: [], backups: [] }
   try {
-    if (Array.isArray(obj.contacts)) store.contacts.splice(0, store.contacts.length, ...obj.contacts)
-    if (Array.isArray(obj.backups)) {
-      // 文件里的备份只有记录；本地若有同名快照则保留快照
-      const localSnap = new Map(store.backups.filter(b => b.data && b.data.length).map(b => [b.id, b.data]))
-      const merged = obj.backups.map(b => ({ ...b, data: b.data && b.data.length ? b.data : (localSnap.get(b.id) || []) }))
-      store.backups.splice(0, store.backups.length, ...merged)
+    const r1 = db.exec('SELECT id,name,codes,phones,created_at,updated_at FROM contacts')
+    if (r1[0]) {
+      for (const row of r1[0].values) {
+        out.contacts.push({
+          id: String(row[0]),
+          name: row[1] || '',
+          codes: safeArr(row[2]),
+          phones: safeArr(row[3]),
+          createdAt: Number(row[4]) || Date.now(),
+          updatedAt: Number(row[5]) || Date.now(),
+        })
+      }
+    }
+    const r2 = db.exec('SELECT id,ts,label,file_name,path,count FROM backups')
+    if (r2[0]) {
+      for (const row of r2[0].values) {
+        out.backups.push({
+          id: String(row[0]), ts: Number(row[1]) || 0, label: row[2] || '',
+          fileName: row[3] || '', path: row[4] || '', count: Number(row[5]) || 0,
+          data: [], noSnapshot: true,
+        })
+      }
     }
   } finally {
-    setTimeout(() => { suppressWrite = false }, 120)
+    db.close()
   }
+  return out
 }
 
-async function readFile(dir) {
+function safeArr(s) {
+  try { const v = JSON.parse(s || '[]'); return Array.isArray(v) ? v : [] } catch (e) { return [] }
+}
+
+function applyToStore(data) {
+  suppressWrite = true
   try {
-    const fh = await dir.getFileHandle(FILE_NAME, { create: false })
-    const f = await fh.getFile()
-    const txt = await f.text()
-    if (!txt.trim()) return null
-    return JSON.parse(txt)
-  } catch (e) {
-    return null   // 文件不存在或读失败
+    if (Array.isArray(data.contacts)) store.contacts.splice(0, store.contacts.length, ...data.contacts)
+    if (Array.isArray(data.backups)) store.backups.splice(0, store.backups.length, ...data.backups)
+  } finally {
+    setTimeout(() => { suppressWrite = false }, 150)
   }
 }
 
-async function writeFile(dir, data) {
+/** 取（并按需创建）子目录，例如 <html目录>/db、<html目录>/backup */
+async function subDir(root, name, create = true) {
+  return root.getDirectoryHandle(name, { create })
+}
+
+async function readBytes(root) {
+  try {
+    const dir = await subDir(root, DB_SUBDIR, false)
+    const fh = await dir.getFileHandle(FILE_NAME, { create: false })
+    const buf = await (await fh.getFile()).arrayBuffer()
+    return new Uint8Array(buf)
+  } catch (e) {
+    return null
+  }
+}
+
+async function writeBytes(root, bytes) {
+  const dir = await subDir(root, DB_SUBDIR, true)
   const fh = await dir.getFileHandle(FILE_NAME, { create: true })
   const w = await fh.createWritable()
-  // 数据量大时用紧凑格式（文件更小、写入更快）；小数据保留缩进便于查看
-  const small = !data.contacts || data.contacts.length <= 1000
-  await w.write(small ? JSON.stringify(data, null, 2) : JSON.stringify(data))
+  await w.write(bytes)
   await w.close()
 }
 
-/** 按需把内存数据写入数据文件（防抖在调用侧做） */
+function b64ToBytes(b64) {
+  const bin = atob(b64)
+  const out = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+  return out
+}
+
+/** 备份 Excel 落到 <html目录>/backup/，返回展示用路径 */
+export async function saveBackupExcel(fileName, base64) {
+  if (!dfState.connected || !dirHandle) return ''
+  const dir = await subDir(dirHandle, BACKUP_SUBDIR, true)
+  const fh = await dir.getFileHandle(fileName, { create: true })
+  const w = await fh.createWritable()
+  await w.write(b64ToBytes(base64))
+  await w.close()
+  return `${dfState.dirName}/${BACKUP_SUBDIR}/${fileName}`
+}
+
+/** 删除 backup/ 里的备份文件（path 为展示路径或文件名） */
+export async function deleteBackupExcel(path) {
+  if (!dfState.connected || !dirHandle || !path) return false
+  const name = String(path).split('/').pop()
+  try {
+    const dir = await subDir(dirHandle, BACKUP_SUBDIR, false)
+    await dir.removeEntry(name)
+    return true
+  } catch (e) {
+    return false
+  }
+}
+
+/** 列出 backup/ 目录里的文件（用于校验/展示） */
+export async function listBackupFiles() {
+  if (!dfState.connected || !dirHandle) return []
+  try {
+    const dir = await subDir(dirHandle, BACKUP_SUBDIR, false)
+    const out = []
+    for await (const [name, handle] of dir.entries()) {
+      if (handle.kind === 'file') {
+        const f = await handle.getFile()
+        out.push({ name, size: f.size, lastModified: f.lastModified })
+      }
+    }
+    return out.sort((a, b) => b.lastModified - a.lastModified)
+  } catch (e) {
+    return []
+  }
+}
+
+/** 旧版 JSON 数据文件迁移（存在则读取并转成 .db） */
+async function readLegacyJson(dir) {
+  try {
+    const fh = await dir.getFileHandle(LEGACY_JSON, { create: false })
+    const txt = await (await fh.getFile()).text()
+    const obj = JSON.parse(txt)
+    if (obj && Array.isArray(obj.contacts)) {
+      return { contacts: obj.contacts, backups: Array.isArray(obj.backups) ? obj.backups : [] }
+    }
+  } catch (e) { /* 忽略 */ }
+  return null
+}
+
+/** 把内存数据写进 .db 文件 */
 export async function writeNow(silent = true) {
   if (!dfState.connected || !dirHandle) return false
   try {
-    await writeFile(dirHandle, pack())
+    const t0 = performance.now()
+    await ensureSql()
+    const db = dbFromStore()
+    const bytes = db.export()
+    db.close()
+    await writeBytes(dirHandle, bytes)
+    dfState.dbMs = Math.round(performance.now() - t0)
     dfState.lastSaved = Date.now()
     dfState.lastError = ''
     return true
   } catch (e) {
     dfState.lastError = String(e && e.message ? e.message : e)
-    if (!silent) window.alert('写入数据文件失败：' + dfState.lastError)
+    if (!silent) window.alert('写入数据库文件失败：' + dfState.lastError)
     return false
   }
 }
 
-/** 用户点选文件夹（必须是 html 所在的文件夹） */
+/** 用户点选文件夹（应是 html 所在文件夹） */
 export async function pickFolder() {
   if (!supported) {
     window.alert('当前浏览器不支持直接读写文件。请用 Chrome / Edge 打开本页面。')
@@ -148,25 +294,35 @@ export async function pickFolder() {
     if (dir.name !== currentDirName()) {
       const go = window.confirm(
         `你选的是文件夹「${dir.name}」，而本页面所在文件夹是「${currentDirName()}」。\n\n` +
-        `数据文件将保存在你选的文件夹里（${dir.name}/${FILE_NAME}）。\n` +
+        `数据库文件将保存在你选的文件夹里（${dir.name}/${FILE_NAME}）。\n` +
         `要让数据跟着 html 走，请改选 html 所在的那个文件夹。\n\n仍要用「${dir.name}」吗？`
       )
       if (!go) { dfState.busy = false; return false }
     }
     try { await idbSet(IDB_KEY, dir) } catch (e) { /* 句柄存不下也能用本次会话 */ }
-    const existing = await readFile(dir)
     dirHandle = dir
     dfState.dirName = dir.name
     dfState.connected = true
     dfState.needGrant = false
-    if (existing) {
-      const useFile = window.confirm(`该文件夹里已有数据文件（${existing.contacts ? existing.contacts.length : 0} 条联系人）。\n\n点「确定」= 用文件里的数据覆盖当前页面数据\n点「取消」= 用当前页面数据覆盖那个文件`)
-      if (useFile) apply(existing)
-      else await writeFile(dir, pack())
+    await ensureSql()
+    // 先把目录结构建好：<html目录>/db（数据库）、<html目录>/backup（备份）
+    try { await subDir(dir, DB_SUBDIR, true); await subDir(dir, BACKUP_SUBDIR, true) } catch (e) {}
+
+    const bytes = await readBytes(dir)
+    const legacy = bytes ? null : await readLegacyJson(dir)
+    if (bytes && bytes.length > 100) {
+      const parsed = storeFromBytes(bytes)
+      const useFile = window.confirm(`该文件夹里已有数据库文件 ${FILE_NAME}（${parsed.contacts.length} 条联系人）。\n\n点「确定」= 用文件里的数据覆盖当前页面数据\n点「取消」= 用当前页面数据覆盖那个数据库文件`)
+      if (useFile) applyToStore(parsed)
+      else await writeNow(false)
+    } else if (legacy) {
+      if (window.confirm(`发现旧版数据文件 ${LEGACY_JSON}（${legacy.contacts.length} 条联系人）。\n\n点「确定」= 迁移成 ${FILE_NAME}（推荐）\n点「取消」= 忽略，用当前页面数据`)) {
+        applyToStore(legacy)
+      }
+      await writeNow(false)
     } else {
-      await writeFile(dir, pack())
+      await writeNow(false)
     }
-    dfState.lastSaved = Date.now()
     return true
   } catch (e) {
     if (e && e.name !== 'AbortError') window.alert('选择文件夹失败：' + (e.message || e))
@@ -176,31 +332,31 @@ export async function pickFolder() {
   }
 }
 
-/** 本次会话需要重新授权时点一下（浏览器安全要求用户手势） */
+/** 本次会话需要重新授权时点一下 */
 export async function grantAndConnect() {
   if (!dirHandle) return false
   try {
     const p = await dirHandle.requestPermission({ mode: 'readwrite' })
     if (p !== 'granted') return false
-    const existing = await readFile(dirHandle)
+    await ensureSql()
+    const bytes = await readBytes(dirHandle)
     dfState.connected = true
     dfState.needGrant = false
-    if (existing) {
-      // 有文件就先问清楚，避免把刚录入的数据直接冲掉
-      const useFile = window.confirm(`数据文件已存在（${existing.contacts ? existing.contacts.length : 0} 条联系人）。\n\n点「确定」= 用文件里的数据覆盖当前页面数据\n点「取消」= 用当前页面数据覆盖那个文件`)
-      if (useFile) apply(existing)
-      else await writeFile(dirHandle, pack())
+    if (bytes && bytes.length > 100) {
+      const parsed = storeFromBytes(bytes)
+      const useFile = window.confirm(`数据库文件已存在（${parsed.contacts.length} 条联系人）。\n\n点「确定」= 用文件里的数据覆盖当前页面数据\n点「取消」= 用当前页面数据覆盖那个数据库文件`)
+      if (useFile) applyToStore(parsed)
+      else await writeNow(false)
     } else {
-      await writeFile(dirHandle, pack())
+      await writeNow(false)
     }
-    dfState.lastSaved = Date.now()
     return true
   } catch (e) {
     return false
   }
 }
 
-/** 启动时：从 IndexedDB 取回上次的文件夹句柄 */
+/** 启动时：取回上次的文件夹句柄 */
 export async function restoreFromStore() {
   if (!supported) return
   try {
@@ -210,17 +366,15 @@ export async function restoreFromStore() {
     dfState.dirName = h.name || ''
     const p = await h.queryPermission({ mode: 'readwrite' })
     if (p === 'granted') {
-      const existing = await readFile(h)
+      await ensureSql()
+      const bytes = await readBytes(h)
       dfState.connected = true
-      if (existing) apply(existing)
-      else await writeFile(h, pack())
-      dfState.lastSaved = Date.now()
+      if (bytes && bytes.length > 100) applyToStore(storeFromBytes(bytes))
+      else await writeNow(true)
     } else if (p === 'prompt') {
-      dfState.needGrant = true          // 页面上点一下「授权并连接」
+      dfState.needGrant = true
     }
-  } catch (e) {
-    /* 忽略 */
-  }
+  } catch (e) { /* 忽略 */ }
 }
 
 export function disconnect() {
@@ -231,18 +385,15 @@ export function disconnect() {
   idbDel(IDB_KEY)
 }
 
-/** 是否应写入文件（供 store watch 调用） */
 export function shouldWrite() {
   return dfState.connected && !!dirHandle && !suppressWrite
 }
 
-/** 当前 html 所在文件夹名（用于校验用户是否选对） */
 export function currentDirName() {
   try {
     const p = decodeURIComponent(location.pathname)
     if (location.protocol === 'file:') {
       const parts = p.split('/').filter(Boolean)
-      // Windows: /D:/folder/file.html → 取 folder；Linux: /a/b/file.html → 取 b
       return parts.length >= 2 ? parts[parts.length - 2] : (parts[0] || '')
     }
     return (location.pathname.split('/').filter(Boolean).slice(-2, -1)[0] || '')
@@ -251,13 +402,20 @@ export function currentDirName() {
   }
 }
 
-/* 排障/自测钩子：可注入模拟文件夹句柄验证读写逻辑（不影响正常使用） */
+/* 排障/自测钩子 */
 if (typeof window !== 'undefined') {
   window.__contactsDataFile = {
     state: dfState,
-    pack, readFile, writeFile,
+    storeFromBytes, dbFromStore,
     setDir: d => { dirHandle = d; dfState.dirName = (d && d.name) || '' },
     setConnected: v => { dfState.connected = !!v },
-    currentDirName,
+    ensureSql, currentDirName,
+    async dumpBytes() {
+      await ensureSql()
+      const db = dbFromStore()
+      const b = db.export()
+      db.close()
+      return b
+    },
   }
 }

@@ -25,7 +25,7 @@ const showBanner = computed(() => dfState.supported && !dfState.connected && !di
 async function connect() {
   if (dfState.needGrant) {
     const ok = await grantAndConnect()
-    if (ok) { toast('已连接数据文件，数据将保存在 html 同目录', 'ok', 3600); return }
+    if (ok) { toast('已连接数据库文件，数据将保存在 html 同目录', 'ok', 3600); return }
   }
   const ok = await pickFolder()
   if (ok) toast('已连接：数据保存在 ' + dfState.dirName + '/' + dfState.fileName, 'ok', 4200)

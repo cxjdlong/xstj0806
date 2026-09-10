@@ -1,6 +1,6 @@
 <template>
   <div class="dl-card dl-panel" style="margin-bottom:16px">
-    <div class="dl-card-hd">📁 数据文件（让数据跟着 html 走）</div>
+    <div class="dl-card-hd">📁 数据库文件（让数据跟着 html 走）</div>
     <div style="padding:14px 16px">
       <div class="dl-df-row">
         <span class="dl-df-dot" :class="dfState.connected ? 'on' : 'off'"></span>
@@ -16,8 +16,9 @@
         </template>
       </div>
       <div class="dl-df-desc">
-        连接后，每次改动都会自动写入 <code>{{ dfState.fileName }}</code>；下次双击 html 打开会自动读回。
-        <b>把这个文件夹拷到别的电脑，数据一起带走。</b>（浏览器安全策略要求首次手选一次文件夹；Chrome/Edge 会记住位置。）
+        连接后每次改动都会自动写入这个 <b>SQLite 数据库文件</b>（<code>{{ dfState.fileName }}</code>），可用 DB Browser for SQLite 等工具直接打开查看；
+        下次双击 html 打开会自动读回，<b>文件夹拷到别的电脑数据一起带走</b>。
+        （浏览器安全策略要求首次手选一次文件夹；Chrome/Edge 会记住位置。）
       </div>
       <div class="dl-df-ops">
         <button v-if="!dfState.connected && dfState.needGrant" class="dl-btn primary" :disabled="dfState.busy" @click="grant">授权并连接</button>
@@ -42,18 +43,18 @@ import { toast } from '../toast.js'
 
 async function pick() {
   const ok = await pickFolder()
-  if (ok) toast('已连接数据文件', 'ok')
+  if (ok) toast('已连接数据库文件', 'ok')
 }
 async function grant() {
   const ok = await grantAndConnect()
-  toast(ok ? '已连接数据文件' : '授权未完成', ok ? 'ok' : 'warn')
+  toast(ok ? '已连接数据库文件' : '授权未完成', ok ? 'ok' : 'warn')
 }
 async function saveNow() {
   const ok = await writeNow(false)
-  if (ok) toast('已写入数据文件', 'ok')
+  if (ok) toast('已写入数据库文件', 'ok')
 }
 function off() {
-  if (!window.confirm('确认断开？断开后数据只存在浏览器里（不会删除已生成的数据文件）。')) return
+  if (!window.confirm('确认断开？断开后数据只存在浏览器里（不会删除已生成的数据库文件）。')) return
   disconnect()
   toast('已断开，改回浏览器存储', 'info')
 }

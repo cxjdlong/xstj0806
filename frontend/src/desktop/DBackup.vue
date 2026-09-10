@@ -86,6 +86,7 @@ import { ref, computed, nextTick } from 'vue'
 import { store, addBackup, removeBackup, replaceAll, snapshot, fmtTime, fmtStamp, normList, pauseSave, resumeSave, persist, addContactsBulk, touchSave } from '../db.js'
 import { sheetToBase64, xlsxName, parseWorkbook } from '../excel.js'
 import { saveFile, deleteFile, exportDirLabel, saveTargetLabel, isApp } from '../native.js'
+import { dfState, saveBackupExcel, deleteBackupExcel } from '../dataFile.js'
 import { toast } from '../toast.js'
 import DataFilePanel from './DataFilePanel.vue'
 
@@ -94,8 +95,8 @@ const page = ref(1)
 const busy = ref('')
 const lastPath = ref('')
 const fileEl = ref(null)
-const dirLabel = exportDirLabel()
-const targetLabel = saveTargetLabel()
+const dirLabel = computed(() => dfState.connected ? (dfState.dirName + '/backup') : exportDirLabel())
+const targetLabel = computed(() => dfState.connected ? '数据库所在文件夹' : saveTargetLabel())
 
 const totalPages = computed(() => Math.max(1, Math.ceil(store.backups.length / PAGE_SIZE)))
 const pageItems = computed(() => {
@@ -103,14 +104,20 @@ const pageItems = computed(() => {
   return store.backups.slice((p - 1) * PAGE_SIZE, p * PAGE_SIZE)
 })
 
-function writeExcel(prefix) {
+async function writeExcel(prefix) {
   const list = snapshot()
   if (!list.length) {
     window.alert('暂无联系人数据，先添加再导出。')
     return null
   }
   const fileName = xlsxName(prefix, fmtStamp(Date.now()))
-  const path = saveFile(fileName, sheetToBase64(list, '通讯录'))
+  const base64 = sheetToBase64(list, '通讯录')
+  let path = ''
+  if (dfState.connected) {
+    // 已连接数据库文件 → 备份 Excel 存到 <html目录>/backup/
+    try { path = await saveBackupExcel(fileName, base64) } catch (e) { path = '' }
+  }
+  if (!path) path = saveFile(fileName, base64)   // 未连接 → 走浏览器下载
   if (!path) {
     window.alert(isApp() ? '写入文件失败，请确认已授予存储权限后重试。' : '保存失败，请允许浏览器下载后重试。')
     return null
@@ -124,10 +131,10 @@ async function fullBackup() {
   busy.value = '正在生成 Excel…'
   await nextTick()
   await new Promise(r => setTimeout(r, 40))   // 先让「处理中」渲染出来，避免大数据时像卡死
-  try { return doFullBackup() } finally { busy.value = '' }
+  try { return await doFullBackup() } finally { busy.value = '' }
 }
-function doFullBackup() {
-  const r = writeExcel('通讯录_全部备份')
+async function doFullBackup() {
+  const r = await writeExcel('通讯录_全部备份')
   if (!r) return
   const rec = addBackup({ label: '全部备份', fileName: r.fileName, path: r.path, data: r.list })
   window.alert(`全部备份成功！\n\n文件：${r.fileName}\n条数：${r.list.length}\n路径：${r.path}\n（已记入备份列表，可恢复/删除）`)
@@ -141,21 +148,24 @@ function pickImport() {
   fileEl.value.click()
 }
 
-function onFile(e) {
+async function onFile(e) {
   const f = e.target.files && e.target.files[0]
   if (!f) return
   busy.value = '正在导入…'
-  if (!window.confirm(`即将导入文件：\n${f.name}\n\n导入前会自动备份一次当前数据，导入后已存在的编码/电话将被覆盖更新。确认导入？`)) return
+  if (!window.confirm(`即将导入文件：\n${f.name}\n\n导入前会自动备份一次当前数据，导入后已存在的编码/电话将被覆盖更新。确认导入？`)) {
+    busy.value = ''
+    return
+  }
+  await nextTick(); await new Promise(r => setTimeout(r, 40))
 
   const before = snapshot()
   let autoName = ''
   if (before.length) {
-    const r = writeExcel('通讯录_导入前自动备份')
+    const r = await writeExcel('通讯录_导入前自动备份')
     autoName = r ? r.fileName : ''
     addBackup({ label: '导入前自动备份', fileName: autoName, path: r ? r.path : '', data: before })
   }
 
-  busy.value = '正在导入…'
   const reader = new FileReader()
   reader.onload = async ev => {
     await nextTick(); await new Promise(r => setTimeout(r, 40))
@@ -220,7 +230,9 @@ function restore(b) {
 
 function askDelete(b) {
   if (!window.confirm(`确认删除该备份？\n\n类型：${b.label}\n时间：${fmtTime(b.ts)}\n条数：${b.count}\n${b.path ? '文件：' + b.path + '\n' : ''}删除后不可恢复。`)) return
-  if (b.path) deleteFile(b.path)
+  if (b.path) {
+    if (dfState.connected) { deleteBackupExcel(b.path) } else { deleteFile(b.path) }
+  }
   removeBackup(b.id)
   toast('备份已删除', 'ok')
 }

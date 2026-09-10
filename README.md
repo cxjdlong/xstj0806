@@ -36,11 +36,29 @@ Excel 表头：`姓名 | 编码1 | 编码2 … | 电话1 | 电话2 … | 更新�
 ### 存储架构
 | 层 | 位置 | 说明 |
 |---|---|---|
-| **主数据库** | 浏览器 **IndexedDB**（`contacts_db`） | 异步、无 5MB 限制、直接存对象不做 JSON 序列化；手机 App 存在 WebView 内部同一套数据库 |
-| **数据文件（可选）** | html **同目录** 的 `通讯录数据.json` | Chrome/Edge 的文件系统接口写入；文件夹拷到哪、数据跟到哪。首次需选一次 html 所在文件夹，之后自动读写 |
-| 旧版 localStorage | `contacts_db_v1` | 首次启动 **自动迁移** 进 IndexedDB 后清除 |
+| **主存储（运行时）** | 浏览器 **IndexedDB**（`contacts_db`） | 异步、无 5MB 限制、不做 JSON 序列化；手机 App 用同一套（WebView 内） |
+| **数据库文件（可选）** | `<html 所在文件夹>/db/通讯录数据.db` | **真正的 SQLite 数据库文件**（sql.js 在浏览器里跑 SQLite 生成/读取），可用 DB Browser for SQLite 等工具直接打开；文件夹拷到哪、数据跟到哪 |
+| **备份文件** | `<html 所在文件夹>/backup/通讯录_全部备份_*.xlsx` | 「全部备份」导出的 Excel 存这里（含「导入前自动备份」） |
+| 旧版 localStorage | `contacts_db_v1` | 首次启动自动迁移进 IndexedDB 后清除 |
+| 旧版 JSON 数据文件 | `通讯录数据.json` | 选文件夹时若发现会自动提示迁移成 `.db` |
 
-> 数据文件里只存联系人 + 备份「记录」（不含备份快照），所以 1 万条也只有约 1.5MB，写入约 30ms；备份快照保存在 IndexedDB 里。
+**目录结构（网页版）**
+```
+任意文件夹/
+├── 通讯录.html          ← 双击即用（单文件，图标/SQLite引擎全内联）
+├── db/
+│   └── 通讯录数据.db     ← SQLite 数据库
+└── backup/
+    └── 通讯录_全部备份_20260910_084711.xlsx
+```
+> 首次点一次「选择 html 所在文件夹」授权（浏览器安全要求），`db/`、`backup/` 会自动创建；之后每次改动自动写库（防抖 1s），全部备份自动落到 `backup/`。
+
+### SQLite 库结构
+```sql
+contacts(id TEXT PRIMARY KEY, name TEXT, codes TEXT, phones TEXT, created_at INTEGER, updated_at INTEGER)  -- codes/phones 为 JSON 数组文本
+backups (id TEXT PRIMARY KEY, ts INTEGER, label TEXT, file_name TEXT, path TEXT, count INTEGER)
+meta    (k TEXT PRIMARY KEY, v TEXT)
+```
 
 ### 万级数据实测（1 万条联系人，Chrome）
 | 操作 | 耗时 |
@@ -52,7 +70,8 @@ Excel 表头：`姓名 | 编码1 | 编码2 … | 电话1 | 电话2 … | 更新�
 | 新增/编辑一条（含落盘） | 50~180ms（1.6MB 全量写库，带防抖） |
 | 导入 Excel 10000 行 | 0.73s |
 | 生成 1 万条 Excel 备份 | 约 1~2s（按钮显示「处理中」） |
-| 写数据文件（1 万条, 1.5MB） | 33ms |
+| 写 SQLite 库（1 万条, 1.4MB） | 155ms |
+| 读 SQLite 库（1 万条） | 138ms 解析 + 39ms 入内存 |
 
 ### 为大数据做的优化
 - **不再每次改动都全量 JSON 序列化**：改用 IndexedDB 结构化克隆 + 500ms 防抖落盘（批量导入时用 `pauseSave/resumeSave` 暂停、结束一次写入）。
