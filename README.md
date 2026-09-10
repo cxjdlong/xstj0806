@@ -31,18 +31,20 @@
 Excel 表头：`姓名 | 编码1 | 编码2 … | 电话1 | 电话2 … | 更新时间`（导入按表头识别，与本 App 导出的模板互通）。
 
 
-## 电脑网页版（单文件 HTML，双击即用）
-同一份前端代码另出一个**单文件网页**：`web/通讯录.html`（≈508KB，JS/CSS 全部内联，无需服务器、无需 nginx）。
+## 电脑网页版（桌面程序界面 · 单文件 HTML）
+电脑版**不是手机界面照搬**，而是独立的桌面网页应用：顶栏 + 左侧导航（通讯录 / 添加·修改 / 备份·导入）+ 表格化内容区，不做手机适配。
 
-- 用法：把 `通讯录.html` 拷到电脑上，**双击用浏览器打开**即可（Chrome/Edge）。功能与手机端一致：通讯录（查询/7条分页/点电话拨打）、添加（多编码多电话+查重）、备份（全部备份导出 Excel / 完全导入 / 备份列表）。
-- Excel 导出走浏览器下载目录（页面会显示保存路径）；导入用系统选文件。
-- 数据存在**浏览器本地**（localStorage），与手机 App **互不相通**；要互通就用「全部备份」导出 Excel → 在另一端「完全导入」。
+- 入口：`frontend/web.html` → `frontend/src/main-desktop.js` → `src/desktop/*.vue` + `src/desktop.css`（手机壳仍走 `index.html` → `main.js` → `src/views/*`）。
+- 产出**单个 HTML**（JS/CSS 全内联，≈512KB），**双击即用，无需服务器/nginx**：`web/通讯录.html`。
+- 界面要点：联系人表（序号/姓名/编码/电话/更新时间/操作，每页 15 条，双击行或点姓名即编辑）、姓名与电话可直接点击操作、备份表（时间/类型/条数/文件/路径，每页 10 条）。
+- 表单逻辑与手机端**共用** `src/useContactForm.js`（查重时机、保留新输入、二次确认等规则完全一致，避免两套行为漂移）。
+- 数据存浏览器本地（localStorage），与手机 App **互不相通**；用「全部备份」导出 Excel → 另一端「完全导入」即可互通。
 - 重新生成：
   ```bash
-  cd frontend && npm run build:web      # 产出 frontend/dist-web/index.html
-  cp dist-web/index.html "../web/通讯录.html"
+  cd frontend && npm run build:web       # 产出 frontend/dist-web/web.html
+  cp dist-web/web.html "../web/通讯录.html"
   ```
-- NAS 上已有成品：`/vol2/1000/ai-projects/contacts/web/通讯录.html`（另放了一份在 `/vol2/1000/ai-projects/drop/通讯录.html`）。
+- NAS 上已有成品：`/vol2/1000/ai-projects/contacts/web/通讯录.html`（另放一份在 `/vol2/1000/ai-projects/drop/通讯录.html`）。
 
 ## 目录结构
 ```
