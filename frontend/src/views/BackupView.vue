@@ -7,8 +7,8 @@
     </div>
 
     <div class="bk-btns">
-      <button class="btn primary" @click="fullBackup">全部备份</button>
-      <button class="btn warn" @click="pickImport">完全导入</button>
+      <button class="btn primary" :disabled="!!busy" @click="fullBackup">{{ busy ? '处理中…' : '全部备份' }}</button>
+      <button class="btn warn" :disabled="!!busy" @click="pickImport">{{ busy === '正在导入…' ? '导入中…' : '完全导入' }}</button>
     </div>
     <div class="tip">
       「全部备份」= 把全部联系人备份成 Excel 存到手机（<b>显示保存路径</b>），同时记入下面的备份列表（可恢复/删除）；「完全导入」= 选 Excel 导入，<b>导入前自动备份一次</b>当前数据，按编码/电话匹配 → 已存在则更新、否则新增。
@@ -50,7 +50,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import {
   store, addBackup, removeBackup, replaceAll, snapshot, fmtTime, fmtStamp, normList, pauseSave, resumeSave, persist, addContactsBulk, touchSave
 } from '../db.js'
@@ -93,9 +93,11 @@ function writeExcel(prefix) {
 }
 
 /** 全部备份：Excel 落手机 + 记一条备份（备份列表可恢复/删除），路径直接显示 */
-function fullBackup() {
+async function fullBackup() {
   if (busy.value) return
   busy.value = '正在生成 Excel…'
+  await nextTick()
+  await new Promise(r => setTimeout(r, 40))   // 先让「处理中」渲染出来，避免大数据时像卡死
   try { return doFullBackup() } finally { busy.value = '' }
 }
 function doFullBackup() {
@@ -128,8 +130,10 @@ function onFile(e) {
     addBackup({ label: '导入前自动备份', fileName: autoName, path: r ? r.path : '', data: before })
   }
 
+  busy.value = '正在导入…'
   const reader = new FileReader()
-  reader.onload = ev => {
+  reader.onload = async ev => {
+    await nextTick(); await new Promise(r => setTimeout(r, 40))
     try {
       const rows = parseWorkbook(ev.target.result)
       if (!rows.length) {

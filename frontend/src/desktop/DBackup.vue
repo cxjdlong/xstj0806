@@ -82,7 +82,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { store, addBackup, removeBackup, replaceAll, snapshot, fmtTime, fmtStamp, normList, pauseSave, resumeSave, persist, addContactsBulk, touchSave } from '../db.js'
 import { sheetToBase64, xlsxName, parseWorkbook } from '../excel.js'
 import { saveFile, deleteFile, exportDirLabel, saveTargetLabel, isApp } from '../native.js'
@@ -119,9 +119,11 @@ function writeExcel(prefix) {
   return { fileName, path, list }
 }
 
-function fullBackup() {
+async function fullBackup() {
   if (busy.value) return
   busy.value = '正在生成 Excel…'
+  await nextTick()
+  await new Promise(r => setTimeout(r, 40))   // 先让「处理中」渲染出来，避免大数据时像卡死
   try { return doFullBackup() } finally { busy.value = '' }
 }
 function doFullBackup() {
@@ -153,8 +155,10 @@ function onFile(e) {
     addBackup({ label: '导入前自动备份', fileName: autoName, path: r ? r.path : '', data: before })
   }
 
+  busy.value = '正在导入…'
   const reader = new FileReader()
-  reader.onload = ev => {
+  reader.onload = async ev => {
+    await nextTick(); await new Promise(r => setTimeout(r, 40))
     try {
       const rows = parseWorkbook(ev.target.result)
       if (!rows.length) {
