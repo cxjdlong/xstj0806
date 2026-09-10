@@ -57,19 +57,19 @@ body {
 .hint { margin: 10px 2px 2px; color: var(--sub); font-size: 13px; }
 .hint b { color: var(--blue); }
 
-/* 列表 */
-.list { margin-top: 10px; }
+/* 列表（紧凑行高） */
+.list { margin-top: 8px; }
 .item {
-  display: flex; align-items: center; gap: 10px;
-  background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-  padding: 12px; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 8px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  padding: 7px 10px; margin-bottom: 6px;
 }
 .item:active { background: #f9fafb; }
 .item-main { flex: 1; min-width: 0; }
-.nm { font-size: 16px; font-weight: 600; margin-bottom: 6px; word-break: break-all; }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.nm { font-size: 14.5px; font-weight: 600; margin-bottom: 3px; word-break: break-all; line-height: 1.25; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .chip {
-  font-size: 12.5px; padding: 3px 8px; border-radius: 999px;
+  font-size: 11.5px; padding: 2px 7px; border-radius: 999px; line-height: 1.35;
   background: #eef2ff; color: #3730a3; border: 1px solid #e0e7ff;
 }
 .chip.phone { background: #ecfdf5; color: #065f46; border-color: #d1fae5; cursor: pointer; }
@@ -90,7 +90,7 @@ body {
   border-radius: 10px; padding: 10px 14px; font-size: 15px; font-weight: 500;
 }
 .btn:active { transform: scale(0.98); }
-.btn.sm { padding: 7px 10px; font-size: 13.5px; }
+.btn.sm { padding: 5px 9px; font-size: 13px; }
 .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
 .btn.ok { background: var(--green); border-color: var(--green); color: #fff; }
 .btn.warn { background: var(--amber); border-color: var(--amber); color: #fff; }

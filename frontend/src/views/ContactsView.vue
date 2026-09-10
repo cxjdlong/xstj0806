@@ -14,7 +14,7 @@
     </div>
 
     <div class="hint">
-      点某条可修改；点绿色电话号可直接拨打；每页 15 条。
+      点某条可修改；点绿色电话号可直接拨打；每页 7 条。
     </div>
 
     <div class="hint" v-if="searched">
@@ -57,7 +57,7 @@ import { store, titleOf, removeContact, fmtTime } from '../db.js'
 import { dial } from '../native.js'
 import { toast } from '../toast.js'
 
-const PAGE_SIZE = 15
+const PAGE_SIZE = 7
 const emit = defineEmits(['add', 'edit'])
 
 const kw = ref('')
