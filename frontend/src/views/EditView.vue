@@ -46,14 +46,11 @@
       </div>
     </section>
 
-    <!-- 段4：省份（可不填，查询也支持按省份） -->
+    <!-- 段4：省份（和姓名一样，直接填，可不填） -->
     <section class="seg">
       <div class="seg-hd">省份 <span class="opt">（可不填）</span></div>
       <div class="row">
-        <select class="in" v-model="province">
-          <option value="">（不填）</option>
-          <option v-for="p in PROVINCES" :key="p" :value="p">{{ p }}</option>
-        </select>
+        <input class="in" v-model="province" type="text" placeholder="请输入省份（可不填）" />
       </div>
     </section>
 
@@ -72,7 +69,6 @@
 <script setup>
 import { titleOf } from '../db.js'
 import { useContactForm } from '../useContactForm.js'
-import { PROVINCES } from '../provinces.js'
 
 const props = defineProps({ editId: { type: String, default: null } })
 const emit = defineEmits(['done'])

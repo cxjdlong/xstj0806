@@ -3,13 +3,13 @@
     <div class="dl-view-hd">
       <div>
         <h2>通讯录</h2>
-        <div class="dl-sub">查询支持 编码 / 电话 / 姓名 / 省份，包含即命中；每页 8 条，结果超页自动分页。</div>
+        <div class="dl-sub">查询支持 编码 / 电话 / 姓名，包含即命中；点姓名或电话可直接拨打。</div>
       </div>
       <button class="dl-btn primary" @click="$emit('add')">＋ 新增联系人</button>
     </div>
 
     <div class="dl-toolbar">
-      <input v-model="kw" class="dl-input" type="search" placeholder="输入编码 / 电话 / 姓名 / 省份（包含即查询）"
+      <input v-model="kw" class="dl-input" type="search" placeholder="输入编码 / 电话 / 姓名（包含即查询）"
              @keyup.enter="doSearch" />
       <button class="dl-btn" @click="doSearch">查询</button>
       <button class="dl-btn ghost" @click="resetSearch">重置</button>
@@ -23,7 +23,6 @@
           <tr>
             <th style="width:56px">#</th>
             <th style="width:150px">姓名</th>
-            <th style="width:96px">省份</th>
             <th>编码</th>
             <th>电话</th>
             <th style="width:170px">更新时间</th>
@@ -34,7 +33,6 @@
           <tr v-for="(c, i) in pageItems" :key="c.id" @dblclick="$emit('edit', c.id)">
             <td class="dl-muted">{{ (page - 1) * PAGE_SIZE + i + 1 }}</td>
             <td><span class="dl-name" @click="$emit('edit', c.id)" title="点击编辑">{{ titleOf(c) }}</span></td>
-            <td><span v-if="c.province" class="dl-tag prov">{{ c.province }}</span><span v-else class="dl-muted">—</span></td>
             <td>
               <span v-if="!c.codes.length" class="dl-muted">—</span>
               <span v-for="v in c.codes" :key="'c' + v" class="dl-tag code">{{ v }}</span>
@@ -50,7 +48,7 @@
             </td>
           </tr>
           <tr v-if="!pageItems.length">
-            <td colspan="7" class="dl-empty">
+            <td colspan="6" class="dl-empty">
               {{ searched ? '没有匹配的通讯录' : '还没有联系人，点右上角「＋ 新增联系人」开始' }}
             </td>
           </tr>
@@ -87,7 +85,7 @@ const result = computed(() => {
   const k = kwUsed.value.trim().toLowerCase()
   if (!k) return store.contacts
   return store.contacts.filter(c =>
-    [...(c.codes || []), ...(c.phones || []), c.name || '', c.province || '']
+    [...(c.codes || []), ...(c.phones || []), c.name || '']
       .some(v => String(v).toLowerCase().includes(k))
   )
 })

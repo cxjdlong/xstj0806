@@ -51,16 +51,6 @@
         </div>
       </div>
 
-      <div class="dl-seg">
-        <div class="dl-seg-hd">省份 <span class="dl-muted">（可不填，查询支持按省份）</span></div>
-        <div class="dl-row">
-          <label class="dl-label">省份</label>
-          <select class="dl-input wide" v-model="province">
-            <option value="">（不填）</option>
-            <option v-for="p in PROVINCES" :key="p" :value="p">{{ p }}</option>
-          </select>
-        </div>
-      </div>
 
       <div class="dl-form-foot">
         <button class="dl-btn primary" @click="save">提交保存</button>
@@ -74,13 +64,12 @@
 <script setup>
 import { titleOf } from '../db.js'
 import { useContactForm } from '../useContactForm.js'
-import { PROVINCES } from '../provinces.js'
 
 const props = defineProps({ editId: { type: String, default: null } })
 const emit = defineEmits(['done'])
 
 const {
-  codes, phones, name, province, editingId, loaded, addedCodes, addedPhones, freshCount,
+  codes, phones, name, editingId, loaded, addedCodes, addedPhones, freshCount,
   isRed, isFresh, onBlur, addRow, delRow, detach, clearAll, save,
 } = useContactForm(() => props.editId, () => emit('done', 'saved'))
 </script>
