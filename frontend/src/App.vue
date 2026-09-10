@@ -37,6 +37,7 @@ import ContactsView from './views/ContactsView.vue'
 import EditView from './views/EditView.vue'
 import BackupView from './views/BackupView.vue'
 import { toasts } from './toast.js'
+import { saveNowForce } from './db.js'
 
 const tabs = [
   { k: 'contacts', n: '通讯录' },
@@ -59,4 +60,8 @@ function go(k, id = null) {
 function onDone() {
   tab.value = 'contacts'
 }
+
+// 切后台/关闭前把待写入的数据落盘（防抖期间关掉页面也不会丢）
+document.addEventListener('visibilitychange', () => { if (document.hidden) saveNowForce() })
+window.addEventListener('beforeunload', () => saveNowForce())
 </script>

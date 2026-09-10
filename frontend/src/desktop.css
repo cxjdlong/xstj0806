@@ -170,3 +170,27 @@ body {
 }
 .dl-toast.ok { background: #059669; }
 .dl-toast.warn { background: #d97706; }
+
+/* 数据文件相关 */
+.dl-chip {
+  padding: 4px 10px; border-radius: 999px; font-size: 12.5px; border: 1px solid var(--d-line);
+  max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dl-chip.ok { color: #065f46; background: #ecfdf5; border-color: #a7f3d0; }
+.dl-chip.warn { color: #92400e; background: #fffbeb; border-color: #fde68a; }
+
+.dl-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a;
+  border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; font-size: 13px; line-height: 1.75;
+}
+.dl-banner-ops { display: flex; gap: 8px; flex: 0 0 auto; }
+.dl-banner code, .dl-df-desc code { background: #fff; border: 1px solid #dbeafe; border-radius: 5px; padding: 0 5px; font-family: ui-monospace, Consolas, monospace; }
+
+.dl-df-row { display: flex; align-items: center; gap: 8px; font-size: 13.5px; flex-wrap: wrap; }
+.dl-df-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.dl-df-dot.on { background: #059669; }
+.dl-df-dot.off { background: #d1d5db; }
+.dl-df-desc { color: var(--d-sub); font-size: 12.6px; line-height: 1.8; margin: 8px 0 12px; }
+.dl-df-ops { display: flex; gap: 8px; flex-wrap: wrap; }
+.dl-df-warn { margin-top: 10px; color: #b91c1c; font-size: 12.6px; }
