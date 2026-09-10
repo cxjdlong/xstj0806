@@ -72,7 +72,7 @@ import { store, titleOf, removeContact, fmtTime } from '../db.js'
 import { dial } from '../native.js'
 import { toast } from '../toast.js'
 
-const PAGE_SIZE = 15
+const PAGE_SIZE = 8
 defineEmits(['add', 'edit'])
 
 const kw = ref('')
