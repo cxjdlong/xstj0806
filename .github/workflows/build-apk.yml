@@ -1,0 +1,81 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'android/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: contacts-apk-build
+  cancel-in-progress: false   # 排队串行跑
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Write local.properties
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+          ls "$ANDROID_HOME" >/dev/null 2>&1 && echo "sdk-ok"
+
+      - name: Bootstrap Gradle (mirror-first, fallback official)
+        run: |
+          cd /tmp
+          (curl -fsSL -o g.zip https://mirrors.cloud.tencent.com/gradle/gradle-8.7-bin.zip \
+            || curl -fsSL -o g.zip https://services.gradle.org/distributions/gradle-8.7-bin.zip)
+          unzip -q g.zip
+          echo "/tmp/gradle-8.7/bin" >> "$GITHUB_PATH"
+
+      - name: Build debug APK (auto debug-signed, installable)
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_HOME }}
+        shell: bash
+        run: |
+          cd android
+          gradle --no-daemon assembleDebug > /tmp/gradle.log 2>&1
+          rc=$?
+          echo "===== tail gradle log ====="
+          tail -140 /tmp/gradle.log || true
+          ls -la app/build/outputs/apk/debug/ 2>/dev/null || true
+          exit $rc
+
+      - name: Report build log (on failure -> push to build-log branch)
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          git config user.name 'actions'
+          git config user.email 'actions@users.noreply.github.com'
+          cp /tmp/gradle.log gradle_err.txt 2>/dev/null || echo "no log file" > gradle_err.txt
+          git checkout --orphan build-log >/dev/null 2>&1
+          git add gradle_err.txt
+          git commit -m "build log $(date +%s)" --allow-empty
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/build-log --force
+          echo "pushed log"
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contacts-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

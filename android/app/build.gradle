@@ -1,0 +1,44 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.contacts.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.contacts.app"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+    signingConfigs {
+        // 固定自签密钥(入库): 每次云打包签名一致 → 可覆盖安装并保留数据
+        stable {
+            storeFile file('keystore.p12')
+            storePassword 'contacts123'
+            storeType 'PKCS12'
+            keyAlias 'contacts'
+            keyPassword 'contacts123'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.stable
+        }
+        debug {
+            signingConfig signingConfigs.stable
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // 内置 assets 离线加载(WebViewAssetLoader)
+    implementation 'androidx.webkit:webkit:1.11.0'
+}
