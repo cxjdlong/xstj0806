@@ -49,7 +49,12 @@ export function deleteFile(path) {
 
 /** 备份目录（展示用） */
 export function exportDirLabel() {
-  return isApp() ? '本机/Download/通讯录备份' : '浏览器下载目录'
+  return isApp() ? '本机/Download/通讯录备份' : '电脑浏览器下载目录'
+}
+
+/** 保存目标（展示用）：手机 or 电脑 */
+export function saveTargetLabel() {
+  return isApp() ? '手机' : '电脑浏览器下载目录'
 }
 
 /** 直接拨打（安卓壳走原生 ACTION_DIAL；浏览器走 tel: 协议） */

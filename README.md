@@ -30,6 +30,20 @@
 
 Excel 表头：`姓名 | 编码1 | 编码2 … | 电话1 | 电话2 … | 更新时间`（导入按表头识别，与本 App 导出的模板互通）。
 
+
+## 电脑网页版（单文件 HTML，双击即用）
+同一份前端代码另出一个**单文件网页**：`web/通讯录.html`（≈508KB，JS/CSS 全部内联，无需服务器、无需 nginx）。
+
+- 用法：把 `通讯录.html` 拷到电脑上，**双击用浏览器打开**即可（Chrome/Edge）。功能与手机端一致：通讯录（查询/7条分页/点电话拨打）、添加（多编码多电话+查重）、备份（全部备份导出 Excel / 完全导入 / 备份列表）。
+- Excel 导出走浏览器下载目录（页面会显示保存路径）；导入用系统选文件。
+- 数据存在**浏览器本地**（localStorage），与手机 App **互不相通**；要互通就用「全部备份」导出 Excel → 在另一端「完全导入」。
+- 重新生成：
+  ```bash
+  cd frontend && npm run build:web      # 产出 frontend/dist-web/index.html
+  cp dist-web/index.html "../web/通讯录.html"
+  ```
+- NAS 上已有成品：`/vol2/1000/ai-projects/contacts/web/通讯录.html`（另放了一份在 `/vol2/1000/ai-projects/drop/通讯录.html`）。
+
 ## 目录结构
 ```
 contacts/

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:web": "vite build --config vite.config.web.js"
   },
   "dependencies": {
     "vue": "^3.5.42",
@@ -14,6 +15,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.4",
-    "vite": "^6.4.3"
+    "vite": "^6.4.3",
+    "vite-plugin-singlefile": "^2.3.3"
   }
 }

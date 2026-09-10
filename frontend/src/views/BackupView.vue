@@ -14,7 +14,7 @@
     </div>
 
     <div class="lastpath" v-if="lastPath">
-      ✅ 文件已保存到手机：<br /><span class="mono">{{ lastPath }}</span>
+      ✅ 文件已保存到{{ targetLabel }}：<br /><span class="mono">{{ lastPath }}</span>
     </div>
 
     <div class="bk-list-hd">
@@ -54,14 +54,16 @@ import {
   store, addBackup, removeBackup, replaceAll, snapshot, fmtTime, fmtStamp, uid, normList
 } from '../db.js'
 import { sheetToBase64, xlsxName, parseWorkbook } from '../excel.js'
-import { saveFile, deleteFile, exportDirLabel } from '../native.js'
+import { saveFile, deleteFile, exportDirLabel, saveTargetLabel } from '../native.js'
 import { toast } from '../toast.js'
+import { isApp } from '../native.js'
 
 const PAGE_SIZE = 10
 const page = ref(1)
 const lastPath = ref('')
 const fileEl = ref(null)
 const dirLabel = exportDirLabel()
+const targetLabel = saveTargetLabel()
 
 const totalPages = computed(() => Math.max(1, Math.ceil(store.backups.length / PAGE_SIZE)))
 const pageItems = computed(() => {
@@ -81,7 +83,7 @@ function writeExcel(prefix) {
   const base64 = sheetToBase64(list, '通讯录')
   const path = saveFile(fileName, base64)
   if (!path) {
-    window.alert('写入手机文件失败，请确认已授予存储权限后重试。')
+    window.alert(isApp() ? '写入文件失败，请确认已授予存储权限后重试。' : '保存失败，请允许浏览器下载后重试。')
     return null
   }
   lastPath.value = path
