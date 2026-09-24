@@ -1,0 +1,4 @@
+# 2026-09-24 在 NAS 上实测通过的版本组合（python:3.11-slim）
+fastapi==0.141.1
+uvicorn==0.53.0
+httpx==0.28.1

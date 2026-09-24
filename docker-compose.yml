@@ -1,0 +1,24 @@
+services:
+  music-add:
+    build: .
+    image: music-add:latest
+    container_name: music-add
+    restart: unless-stopped
+    ports:
+      - "19018:8000"
+    volumes:
+      # 曲库：下载落盘目录（与 music-dl 共用同一曲库）
+      - /vol2/1000/video/music:/music
+      # 飞牛音乐 unix socket：用于建/读歌单
+      - /run/trim_music.socket:/run/trim_music.socket
+      # 飞牛音乐数据库（只读）：按登录账号查 token
+      - /usr/local/apps/@appdata/trim.music/db:/fnos-db:ro
+      # 本服务自己的会话/任务数据
+      - ./data:/app/data
+    environment:
+      MUSICDL_BASE: "http://192.168.10.10:19010/music"
+      MUSIC_DIR: "/music"
+      FNOS_SOCKET: "/run/trim_music.socket"
+      FNOS_DB: "/fnos-db/music.db"
+      DOWNLOAD_CONCURRENCY: "3"
+      TZ: "Asia/Shanghai"

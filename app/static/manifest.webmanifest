@@ -1,0 +1,14 @@
+{
+  "name": "添加歌曲",
+  "short_name": "添加歌曲",
+  "description": "手机端给飞牛曲库加歌：浏览歌单、播放、下载、进歌单",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f0f0f",
+  "theme_color": "#0f0f0f",
+  "icons": [
+    { "src": "/favicon.ico", "sizes": "256x256", "type": "image/x-icon", "purpose": "any" }
+  ]
+}
