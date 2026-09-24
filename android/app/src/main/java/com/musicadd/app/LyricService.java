@@ -78,7 +78,21 @@ public class LyricService extends Service {
         } catch (Exception ignored) {
             // 没给通知权限等情况：不让服务崩掉
         }
+        pushToAccessibility();   // 开了无障碍的话，同步刷新锁屏全屏歌词
         return START_STICKY;
+    }
+
+    /** 把当前 8 行歌词推给无障碍覆盖层（没开无障碍时静默忽略） */
+    private void pushToAccessibility() {
+        try {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < ROWS; i++) {
+                if (i > 0) sb.append(SEP);
+                sb.append(lines[i]);
+            }
+            LyricAccessibilityService.update(sb.toString(), title, artist, color);
+        } catch (Throwable ignored) {
+        }
     }
 
     private void createChannel() {

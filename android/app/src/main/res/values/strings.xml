@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">NAS歌下载</string>
     <string name="notify_channel">播放控制</string>
+    <string name="acc_desc">用于在锁屏上显示全屏滚动歌词（不开也能用，歌词会显示在通知卡片里）</string>
 </resources>

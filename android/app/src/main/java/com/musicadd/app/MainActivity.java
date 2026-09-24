@@ -2,12 +2,15 @@ package com.musicadd.app;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -105,9 +108,70 @@ public class MainActivity extends Activity {
             } catch (Exception ignored) {
             }
         }
+
+        // 无障碍没开的话，提示一次「想要全屏锁屏歌词吗」
+        web.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                promptAccessibilityOnce();
+            }
+        }, 1500);
     }
 
-    /** 把歌词/播放状态丢给前台服务（锁屏通知）。lines 是 5 行歌词，用 \u0001 分隔 */
+    /** 无障碍没开时提示一次（只自动提示一次，之后可从歌词面板里再开） */
+    private void promptAccessibilityOnce() {
+        if (isAccessibilityOn() || prefs.getBoolean("acc_prompted", false)) return;
+        prefs.edit().putBoolean("acc_prompted", true).apply();
+        showAccessibilityDialog();
+    }
+
+    private void showAccessibilityDialog() {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    new AlertDialog.Builder(MainActivity.this)
+                            .setTitle("想要全屏锁屏歌词？")
+                            .setMessage("锁屏歌词默认显示在通知卡片里（最多占屏幕 1/3）。\n\n"
+                                    + "开启一次「无障碍服务」后，歌词可以铺满整个锁屏。\n\n"
+                                    + "点「去开启」→ 在列表里找到「NAS歌下载」→ 拨一下开关即可。\n"
+                                    + "不开也完全不影响使用。")
+                            .setPositiveButton("去开启", new DialogInterface.OnClickListener() {
+                                @Override
+                                public void onClick(DialogInterface dialog, int which) {
+                                    openAccessibilitySettings();
+                                }
+                            })
+                            .setNegativeButton("以后再说", null)
+                            .show();
+                } catch (Exception ignored) {
+                }
+            }
+        });
+    }
+
+    private void openAccessibilitySettings() {
+        try {
+            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** 本应用的无障碍服务是否已开启 */
+    private boolean isAccessibilityOn() {
+        try {
+            if (LyricAccessibilityService.isRunning()) return true;
+            String enabled = Settings.Secure.getString(
+                    getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            if (enabled == null) return false;
+            String me = getPackageName() + "/" + LyricAccessibilityService.class.getName();
+            return enabled.contains(me);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** 把歌词/播放状态丢给前台服务（锁屏通知）。lines 是 8 行歌词，用换行符分隔 */
     private void sendToService(String action, String lines, String title, String artist, String colorHex) {
         isPlaying = true;
         Intent i = new Intent(this, LyricService.class);
@@ -201,6 +265,22 @@ public class MainActivity extends Activity {
                     web.loadUrl(target);
                 }
             });
+        }
+
+        /** 网页里点「开启全屏锁屏歌词」→ 跳到系统无障碍设置（那个开关必须用户自己拨，安卓不让 App 代开） */
+        @JavascriptInterface
+        public void openAccessibility() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    showAccessibilityDialog();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public boolean accessibilityOn() {
+            return isAccessibilityOn();
         }
 
         @JavascriptInterface

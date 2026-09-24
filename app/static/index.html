@@ -215,6 +215,7 @@
     <button class="close" id="lrcClose">收起</button>
     <h3 id="lrcHead">歌词</h3>
     <div class="lrcbar" id="lrcBar"></div>
+    <div class="hint" id="lrcAcc" hidden style="margin:0 0 8px">想要**全屏**锁屏歌词（现在最多 1/3 屏）？<span class="lnk" id="lrcAccBtn">点这里开启</span></div>
     <div class="lrcbody" id="lrcBody"><div class="hint">播放歌曲后这里显示歌词</div></div>
   </div>
 </div>
@@ -396,6 +397,8 @@ function showLogin() {
   $('login').hidden = false; $('app').hidden = true;
   // 不设硬编码默认值；只回填你自己上次填过的地址
   if (!$('srvInput').value) $('srvInput').value = localStorage.getItem('ma_srv') || '';
+  $('userInput').value = '';        // 退出登录后不残留上次的账号
+  if ($('acctInput')) $('acctInput').value = '';
 }
 function showApp() { $('login').hidden = true; $('app').hidden = false; }
 
@@ -460,20 +463,15 @@ function openAcct() {
 }
 
 function renderAcct() {
-  const users = (ME && ME.fnosUsers) || [];
+  // 只显示当前身份：不列出其他飞牛账号（未登录=本地用户；已登录=当前账号）
   const cur = (ME && ME.username) || '';
-  $('acctList').innerHTML = users.length
-    ? `<div class="hint" style="margin:2px 0 6px">点一下就能切换到对应账号：</div>`
-      + users.map(u => `<div class="pick-row${u === cur ? ' on' : ''}" data-user="${esc(u)}">
-        <div class="info">
-          <div class="title">${esc(u)}${u === cur ? '<span class="tag">当前</span>' : ''}</div>
-          <div class="sub">${u === cur ? '正在使用' : '点一下切换到这个账号'}</div>
-        </div>
-        <div class="dot"></div></div>`).join('')
-    : '<div class="hint">读不到飞牛音乐账号列表（可在下面手动输入账号名切换）</div>';
-  document.querySelectorAll('#acctList .pick-row').forEach(el => {
-    el.onclick = () => { if (el.dataset.user !== cur) switchTo(el.dataset.user); };
-  });
+  const isLocalMe = !!(ME && ME.isLocal);
+  $('acctList').innerHTML = `<div class="pick-row on">
+      <div class="info">
+        <div class="title">${esc(cur)}<span class="tag">当前</span></div>
+        <div class="sub">${isLocalMe ? '本地模式 · 未绑定飞牛音乐账号（歌单只存在本地）' : '正在使用的飞牛音乐账号'}</div>
+      </div>
+      <div class="dot"></div></div>`;
 }
 
 async function switchTo(username) {
@@ -971,8 +969,19 @@ function lrcShow(on) {
   $('lrcSheet').hidden = !on;
   $('lrcBtn').style.color = on ? '#4c8dff' : '';
   localStorage.setItem(LRC_ON_KEY, on ? '1' : '0');
-  if (on) loadLyric(CURRENT);
+  if (on) {
+    loadLyric(CURRENT);
+    // App 内：无障碍没开时给出「开启全屏锁屏歌词」入口
+    try {
+      if (window.Android && Android.accessibilityOn) {
+        $('lrcAcc').hidden = !!Android.accessibilityOn();
+      } else {
+        $('lrcAcc').hidden = true;
+      }
+    } catch (e) { $('lrcAcc').hidden = true; }
+  }
 }
+$('lrcAccBtn').onclick = () => { try { Android.openAccessibility(); } catch (e) { toast('请在 App 里操作'); } };
 $('lrcBtn').onclick = () => lrcShow($('lrcSheet').hidden);
 $('lrcClose').onclick = () => lrcShow(false);
 $('lrcSheet').onclick = (e) => { if (e.target === $('lrcSheet')) lrcShow(false); };

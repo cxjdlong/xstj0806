@@ -35,5 +35,18 @@
             android:name=".LyricService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
+
+        <!-- 无障碍覆盖层：锁屏全屏歌词（可选，用户不开也能用） -->
+        <service
+            android:name=".LyricAccessibilityService"
+            android:exported="false"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
     </application>
 </manifest>

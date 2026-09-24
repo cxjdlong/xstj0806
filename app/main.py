@@ -463,7 +463,7 @@ async def login(payload: dict):
         names = []
 
     if want_local:  # 本地模式：不需要飞牛音乐账号
-        resp = JSONResponse({"ok": True, "username": "本地用户", "mode": "local", "fnosUsers": names})
+        resp = JSONResponse({"ok": True, "username": "本地用户", "mode": "local", "fnosUsers": []})
         resp.set_cookie(
             "ma_session", make_session(LOCAL_USER), httponly=True, samesite="lax", max_age=60 * 86400
         )
@@ -474,7 +474,7 @@ async def login(payload: dict):
     if username not in names:
         raise HTTPException(status_code=401, detail=f"飞牛音乐里没有这个账号（现有：{'、'.join(names) or '无'}）")
 
-    resp = JSONResponse({"ok": True, "username": username, "mode": "fnos", "fnosUsers": names})
+    resp = JSONResponse({"ok": True, "username": username, "mode": "fnos", "fnosUsers": [username]})
     resp.set_cookie(
         "ma_session", make_session(username), httponly=True, samesite="lax", max_age=60 * 86400
     )
@@ -493,10 +493,8 @@ async def me(user: str = Depends(current_user)):
     local = is_local(user)
     library_ok = MUSIC_DIR.exists()
     playlists = all_playlists(user)
-    try:
-        fnos_users = [u["name"] for u in fnos.list_users()]
-    except FnosMusicError:
-        fnos_users = []
+    # 账号面板只显示「当前身份」，不下发飞牛账号列表（避免把别人的账号列出来）
+    fnos_users = [] if local else [user]
     return {
         "username": "本地用户" if local else user,
         "rawUsername": user,
