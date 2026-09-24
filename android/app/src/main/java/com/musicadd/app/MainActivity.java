@@ -2,8 +2,11 @@ package com.musicadd.app;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.View;
@@ -36,6 +39,7 @@ public class MainActivity extends Activity {
     private SharedPreferences prefs;
     private long lastBackAt = 0L;
     private int backCount = 0;
+    private boolean isPlaying = false;   // 播放中就不挂起 WebView（锁屏/后台继续放）
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -88,6 +92,46 @@ public class MainActivity extends Activity {
         } else {
             web.loadUrl(buildUrl(saved, user));
         }
+
+        // Android 13+ 需要运行时授予通知权限，否则锁屏歌词通知不显示
+        if (Build.VERSION.SDK_INT >= 33) {
+            try {
+                if (checkSelfPermission("android.permission.POST_NOTIFICATIONS")
+                        != PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 1001);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    /** 把歌词/播放状态丢给前台服务（锁屏通知） */
+    private void sendToService(String action, String lyric, String title, String artist, String colorHex) {
+        isPlaying = true;
+        Intent i = new Intent(this, LyricService.class);
+        i.setAction(action);
+        i.putExtra("lyric", lyric == null ? "" : lyric);
+        i.putExtra("title", title == null ? "" : title);
+        i.putExtra("artist", artist == null ? "" : artist);
+        i.putExtra("color", parseColor(colorHex));
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i);
+            else startService(i);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** "#RRGGBB" / "#AARRGGBB" → int 颜色 */
+    private static int parseColor(String hex) {
+        try {
+            if (hex == null || hex.trim().isEmpty()) return 0xFFFFFFFF;
+            String s = hex.trim();
+            if (s.startsWith("#")) s = s.substring(1);
+            if (s.length() == 8) s = s.substring(2);
+            return (int) (0xFF000000L | Long.parseLong(s, 16));
+        } catch (Exception e) {
+            return 0xFFFFFFFF;
+        }
     }
 
     /** 地址 + 账号 → 带 ?u= 的 URL，网页端会自动登录并跳过登录页 */
@@ -114,6 +158,30 @@ public class MainActivity extends Activity {
         public String savedUser() {
             String u = prefs.getString(KEY_USER, "");
             return u == null ? "" : u;
+        }
+
+        /** 网页歌词换行 → 更新锁屏通知上的歌词 */
+        @JavascriptInterface
+        public void lyric(String line, String title, String artist, String colorHex) {
+            sendToService(LyricService.ACTION_UPDATE, line, title, artist, colorHex);
+        }
+
+        /** 开始播放 → 起前台服务（锁屏/后台不中断），同时把歌词上锁屏 */
+        @JavascriptInterface
+        public void playerStart(String line, String title, String artist, String colorHex) {
+            sendToService(LyricService.ACTION_START, line, title, artist, colorHex);
+        }
+
+        /** 停止播放 → 收起通知并停掉服务 */
+        @JavascriptInterface
+        public void playerStop() {
+            isPlaying = false;
+            try {
+                Intent i = new Intent(MainActivity.this, LyricService.class);
+                i.setAction(LyricService.ACTION_STOP);
+                startService(i);
+            } catch (Exception ignored) {
+            }
         }
 
         /** 服务器地址 + 飞牛音乐账号一起保存（两个都必填，前端已校验，这里再兜一层） */
@@ -169,7 +237,8 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
-        if (web != null) web.onPause();
+        // 播放中不要挂起 WebView：否则锁屏/切后台后音频会被暂停（前台服务在保活）
+        if (web != null && !isPlaying) web.onPause();
         super.onPause();
     }
 
