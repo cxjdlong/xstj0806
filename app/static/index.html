@@ -897,12 +897,18 @@ function paintColorBar() {
 }
 applyLrcColor();
 
-/** 把「当前这句歌词」推给 App（锁屏通知/桌面歌词）；浏览器里没有 Android 对象会自动跳过 */
+/** 把「当前句 + 前后各两句」推给 App（锁屏多行滚动歌词）；浏览器里没有 Android 对象会自动跳过 */
 function pushLyricToNative() {
   if (!window.Android || !Android.lyric) return;
   try {
-    const line = (LRC.lines[LRC.idx] && LRC.lines[LRC.idx].text) || '';
-    Android.lyric(line, (CURRENT && CURRENT.title) || '', (CURRENT && CURRENT.artist) || '', LRC_COLOR);
+    const idx = LRC.idx;
+    const rows = [];
+    for (let k = -2; k <= 2; k++) {
+      const j = idx + k;
+      rows.push((j >= 0 && j < LRC.lines.length && LRC.lines[j]) ? LRC.lines[j].text : '');
+    }
+    Android.lyric(rows.join('\n'),
+      (CURRENT && CURRENT.title) || '', (CURRENT && CURRENT.artist) || '', LRC_COLOR);
   } catch (e) {}
 }
 

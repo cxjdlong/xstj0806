@@ -107,12 +107,12 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** 把歌词/播放状态丢给前台服务（锁屏通知） */
-    private void sendToService(String action, String lyric, String title, String artist, String colorHex) {
+    /** 把歌词/播放状态丢给前台服务（锁屏通知）。lines 是 5 行歌词，用 \u0001 分隔 */
+    private void sendToService(String action, String lines, String title, String artist, String colorHex) {
         isPlaying = true;
         Intent i = new Intent(this, LyricService.class);
         i.setAction(action);
-        i.putExtra("lyric", lyric == null ? "" : lyric);
+        i.putExtra("lines", lines == null ? "" : lines);
         i.putExtra("title", title == null ? "" : title);
         i.putExtra("artist", artist == null ? "" : artist);
         i.putExtra("color", parseColor(colorHex));
@@ -162,16 +162,16 @@ public class MainActivity extends Activity {
             return u == null ? "" : u;
         }
 
-        /** 网页歌词换行 → 更新锁屏通知上的歌词 */
+        /** 网页歌词换行 → 更新锁屏通知（lines = 5 行，用 \u0001 分隔，中间那行是当前句） */
         @JavascriptInterface
-        public void lyric(String line, String title, String artist, String colorHex) {
-            sendToService(LyricService.ACTION_UPDATE, line, title, artist, colorHex);
+        public void lyric(String lines, String title, String artist, String colorHex) {
+            sendToService(LyricService.ACTION_UPDATE, lines, title, artist, colorHex);
         }
 
         /** 开始播放 → 起前台服务（锁屏/后台不中断），同时把歌词上锁屏 */
         @JavascriptInterface
-        public void playerStart(String line, String title, String artist, String colorHex) {
-            sendToService(LyricService.ACTION_START, line, title, artist, colorHex);
+        public void playerStart(String lines, String title, String artist, String colorHex) {
+            sendToService(LyricService.ACTION_START, lines, title, artist, colorHex);
         }
 
         /** 停止播放 → 收起通知并停掉服务 */

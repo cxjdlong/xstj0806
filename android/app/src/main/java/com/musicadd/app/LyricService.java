@@ -15,9 +15,10 @@ import android.widget.RemoteViews;
 import androidx.core.app.NotificationCompat;
 
 /**
- * 播放前台服务：让网页里的音频在锁屏/后台继续播，并在锁屏通知上显示歌词。
+ * 播放前台服务：让网页里的音频在锁屏/后台继续播，并在锁屏通知上显示多行滚动歌词。
  *
- * 通知布局是自定义 RemoteViews（lyric_notify.xml）：背板 60% 透明，歌词字色由网页传入。
+ * 通知布局 lyric_notify.xml：背板 60% 透明；中间那行是「当前句」（大字 + 网页传来的颜色），
+ * 上下各两行是前后文（小字淡显）—— 每换一句就整体上移，形成滚动效果。
  */
 public class LyricService extends Service {
 
@@ -27,10 +28,13 @@ public class LyricService extends Service {
 
     private static final String CHANNEL_ID = "musicadd_play";
     private static final int NOTIFY_ID = 1001;
+    private static final int ROWS = 5;
+    /** 网页把 5 行歌词用换行符拼成一串传过来（歌词本身不含换行，安全） */
+    private static final String SEP = "\n";
 
     private String title = "";
     private String artist = "";
-    private String lyric = "";
+    private String[] lines = new String[]{"", "", "", "", ""};
     private int color = Color.WHITE;
 
     @Override
@@ -58,7 +62,13 @@ public class LyricService extends Service {
             }
             if (intent.hasExtra("title")) title = nz(intent.getStringExtra("title"));
             if (intent.hasExtra("artist")) artist = nz(intent.getStringExtra("artist"));
-            if (intent.hasExtra("lyric")) lyric = nz(intent.getStringExtra("lyric"));
+            if (intent.hasExtra("lines")) {
+                String raw = nz(intent.getStringExtra("lines"));
+                String[] parts = raw.split(SEP, -1);
+                for (int i = 0; i < ROWS; i++) {
+                    lines[i] = (i < parts.length) ? nz(parts[i]) : "";
+                }
+            }
             if (intent.hasExtra("color")) color = intent.getIntExtra("color", Color.WHITE);
         }
         try {
@@ -85,8 +95,21 @@ public class LyricService extends Service {
         RemoteViews rv = new RemoteViews(getPackageName(), R.layout.lyric_notify);
         rv.setTextViewText(R.id.n_title, title.isEmpty() ? getString(R.string.app_name) : title);
         rv.setTextViewText(R.id.n_artist, artist);
-        rv.setTextViewText(R.id.n_lyric, lyric.isEmpty() ? "♪" : lyric);
-        rv.setTextColor(R.id.n_lyric, color);
+
+        int[] ids = new int[]{R.id.n_l0, R.id.n_l1, R.id.n_l2, R.id.n_l3, R.id.n_l4};
+        for (int i = 0; i < ROWS; i++) {
+            rv.setTextViewText(ids[i], lines[i]);
+        }
+        // 中间那行是当前句：用网页选的颜色；全空时给个音符占位
+        boolean empty = true;
+        for (String s : lines) {
+            if (s != null && !s.trim().isEmpty()) {
+                empty = false;
+                break;
+            }
+        }
+        rv.setTextViewText(R.id.n_l2, empty ? "♪" : lines[2]);
+        rv.setTextColor(R.id.n_l2, color);
 
         Intent open = new Intent(this, MainActivity.class);
         open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
