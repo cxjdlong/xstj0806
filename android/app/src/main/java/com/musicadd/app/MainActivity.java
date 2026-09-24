@@ -3,6 +3,7 @@ package com.musicadd.app;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.View;
@@ -28,6 +29,7 @@ public class MainActivity extends Activity {
     private static final String DEFAULT_URL = "https://music.dx66.top:8888/";
     private static final String PREFS = "musicadd";
     private static final String KEY_URL = "server_url";
+    private static final String KEY_USER = "fnos_user";
     private static final String SETUP_PAGE = "file:///android_asset/setup.html";
 
     private WebView web;
@@ -80,11 +82,19 @@ public class MainActivity extends Activity {
         });
 
         String saved = prefs.getString(KEY_URL, "");
-        if (saved == null || saved.trim().isEmpty()) {
-            web.loadUrl(SETUP_PAGE);
+        String user = prefs.getString(KEY_USER, "");
+        if (saved == null || saved.trim().isEmpty() || user == null || user.trim().isEmpty()) {
+            web.loadUrl(SETUP_PAGE);          // 地址或账号没填全 → 设置页（两个都必须填）
         } else {
-            web.loadUrl(saved);
+            web.loadUrl(buildUrl(saved, user));
         }
+    }
+
+    /** 地址 + 账号 → 带 ?u= 的 URL，网页端会自动登录并跳过登录页 */
+    private String buildUrl(String base, String user) {
+        String sep = base.contains("?") ? "&" : "?";
+        if (user == null || user.trim().isEmpty()) return base;
+        return base + sep + "u=" + Uri.encode(user.trim());
     }
 
     /** 暴露给内置设置页的桥 */
@@ -101,12 +111,20 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void save(String url) {
+        public String savedUser() {
+            String u = prefs.getString(KEY_USER, "");
+            return u == null ? "" : u;
+        }
+
+        /** 服务器地址 + 飞牛音乐账号一起保存（两个都必填，前端已校验，这里再兜一层） */
+        @JavascriptInterface
+        public void save(String url, String user) {
             String u = url == null ? "" : url.trim();
-            if (u.isEmpty()) u = DEFAULT_URL;
+            String name = user == null ? "" : user.trim();
+            if (u.isEmpty() || name.isEmpty()) return;
             if (!u.startsWith("http://") && !u.startsWith("https://")) u = "http://" + u;
-            prefs.edit().putString(KEY_URL, u).apply();
-            final String target = u;
+            prefs.edit().putString(KEY_URL, u).putString(KEY_USER, name).apply();
+            final String target = buildUrl(u, name);
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
@@ -120,7 +138,10 @@ public class MainActivity extends Activity {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    web.reload();
+                    String u = prefs.getString(KEY_URL, "");
+                    String name = prefs.getString(KEY_USER, "");
+                    if (u != null && !u.trim().isEmpty()) web.loadUrl(buildUrl(u, name));
+                    else web.reload();
                 }
             });
         }
