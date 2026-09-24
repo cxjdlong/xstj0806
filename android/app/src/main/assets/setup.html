@@ -34,7 +34,7 @@
   <input id="user" type="text" placeholder="" autocapitalize="off" autocorrect="off" spellcheck="false">
 
   <button id="save">保存并进入</button>
-  <button class="ghost" id="retry">用已保存的重新连接</button>
+  <button class="ghost" id="local">不填账号，直接进入（本地歌单）</button>
   <div class="warn" id="warn"></div>
 
   <div class="tip">
@@ -59,16 +59,25 @@ $('save').onclick = function () {
   var u = $('url').value.trim();
   var name = $('user').value.trim();
   if (!u) { $('warn').textContent = '请填写服务器地址'; $('url').focus(); return; }
-  if (!name) { $('warn').textContent = '请填写飞牛音乐账号'; $('user').focus(); return; }
+  if (!name) { $('warn').textContent = '请填写飞牛音乐账号（不想填就点下面那个按钮进本地歌单模式）'; $('user').focus(); return; }
   $('warn').textContent = '';
   var b = bridge();
   if (b) { b.save(u, name); } else { location.href = u; }
 };
 
-$('retry').onclick = function () {
+$('retry') && ($('retry').onclick = function () {
   var b = bridge();
   if (b) { b.save($('url').value.trim() || b.savedUrl(), $('user').value.trim() || b.savedUser()); }
   else { location.reload(); }
+});
+
+// 无飞牛账号也能用：只填服务器地址，直接进本地歌单模式
+$('local').onclick = function () {
+  var u = $('url').value.trim();
+  if (!u) { $('warn').textContent = '请先填写服务器地址'; $('url').focus(); return; }
+  $('warn').textContent = '';
+  var b = bridge();
+  if (b) { b.saveLocal(u); } else { location.href = u + '/?local=1'; }
 };
 </script>
 </body>

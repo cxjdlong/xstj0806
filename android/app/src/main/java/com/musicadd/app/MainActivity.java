@@ -87,8 +87,10 @@ public class MainActivity extends Activity {
 
         String saved = prefs.getString(KEY_URL, "");
         String user = prefs.getString(KEY_USER, "");
-        if (saved == null || saved.trim().isEmpty() || user == null || user.trim().isEmpty()) {
-            web.loadUrl(SETUP_PAGE);          // 地址或账号没填全 → 设置页（两个都必须填）
+        if (saved == null || saved.trim().isEmpty()) {
+            web.loadUrl(SETUP_PAGE);          // 还没配过地址 → 设置页
+        } else if (user == null || user.trim().isEmpty()) {
+            web.loadUrl(saved + (saved.contains("?") ? "&" : "?") + "local=1");   // 无账号 → 本地歌单模式
         } else {
             web.loadUrl(buildUrl(saved, user));
         }
@@ -193,6 +195,21 @@ public class MainActivity extends Activity {
             if (!u.startsWith("http://") && !u.startsWith("https://")) u = "http://" + u;
             prefs.edit().putString(KEY_URL, u).putString(KEY_USER, name).apply();
             final String target = buildUrl(u, name);
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    web.loadUrl(target);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void saveLocal(String url) {
+            String u = url == null ? "" : url.trim();
+            if (u.isEmpty()) return;
+            if (!u.startsWith("http://") && !u.startsWith("https://")) u = "http://" + u;
+            prefs.edit().putString(KEY_URL, u).putString(KEY_USER, "").apply();
+            final String target = u + (u.contains("?") ? "&" : "?") + "local=1";
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
