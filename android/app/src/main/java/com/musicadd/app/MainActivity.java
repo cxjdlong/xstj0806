@@ -25,7 +25,7 @@ import android.widget.FrameLayout;
  */
 public class MainActivity extends Activity {
 
-    private static final String DEFAULT_URL = "http://192.168.10.10:19018";
+    private static final String DEFAULT_URL = "https://music.dx66.top:8888/";
     private static final String PREFS = "musicadd";
     private static final String KEY_URL = "server_url";
     private static final String SETUP_PAGE = "file:///android_asset/setup.html";
