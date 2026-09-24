@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>服务器地址</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:#0f0f0f;color:#ededed}
+  body{font:16px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+       min-height:100dvh;display:flex;flex-direction:column;justify-content:center;
+       padding:24px 20px calc(24px + env(safe-area-inset-bottom))}
+  h1{font-size:20px;margin:0 0 6px}
+  p.sub{color:#8b8b8b;font-size:13px;margin:0 0 22px;line-height:1.7}
+  label{display:block;font-size:13px;color:#9a9a9a;margin-bottom:6px}
+  input{width:100%;padding:13px 14px;font-size:16px;color:#eee;background:#1a1a1a;
+        border:1px solid #2b2b2b;border-radius:10px;outline:none;-webkit-appearance:none}
+  input:focus{border-color:#2f6fff}
+  button{width:100%;padding:14px;margin-top:16px;font-size:16px;font-weight:600;border:0;
+         border-radius:10px;background:#2f6fff;color:#fff}
+  button.ghost{background:#1e1e1e;color:#ddd;border:1px solid #2f2f2f;font-weight:500}
+  .tip{margin-top:18px;font-size:12.5px;color:#7e7e7e;line-height:1.8}
+  .warn{color:#ffb46b;font-size:13px;margin-bottom:12px;line-height:1.6}
+</style>
+</head>
+<body>
+  <h1>添加歌曲</h1>
+  <p class="sub">填 NAS 上 music-add 服务的地址，手机连同一个 WiFi 即可。</p>
+  <div id="warn" class="warn" hidden>连不上服务器，请检查地址或网络。</div>
+
+  <label>服务器地址</label>
+  <input id="url" type="text" placeholder="http://192.168.10.10:19018" autocapitalize="off" autocorrect="off" spellcheck="false">
+  <button id="save">保存并打开</button>
+  <button class="ghost" id="retry">用已保存地址重试</button>
+
+  <div class="tip">
+    · 默认：<b id="def"></b><br>
+    · 局域网 IP，或你配的反代域名（如 yinyue.dx66.top:8888）<br>
+    · 以后想改地址：<b>连按返回键 3 次</b>
+  </div>
+
+<script>
+'use strict';
+var $ = function (id) { return document.getElementById(id); };
+function bridge() { return (typeof Android !== 'undefined') ? Android : null; }
+
+(function init() {
+  var b = bridge();
+  var def = b ? b.defaultUrl() : 'http://192.168.10.10:19018';
+  $('def').textContent = def;
+  var saved = b ? b.savedUrl() : '';
+  $('url').value = saved || def;
+  if (!saved) { $('warn').hidden = true; }
+  else { $('warn').hidden = false; }
+})();
+
+$('save').onclick = function () {
+  var v = $('url').value.trim();
+  var b = bridge();
+  if (b) { b.save(v); } else { location.href = v; }
+};
+
+$('retry').onclick = function () {
+  var b = bridge();
+  if (b) { b.save($('url').value.trim() || b.savedUrl()); } else { location.reload(); }
+};
+</script>
+</body>
+</html>
