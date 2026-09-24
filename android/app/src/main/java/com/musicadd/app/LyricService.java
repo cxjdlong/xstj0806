@@ -28,13 +28,15 @@ public class LyricService extends Service {
 
     private static final String CHANNEL_ID = "musicadd_play";
     private static final int NOTIFY_ID = 1001;
-    private static final int ROWS = 5;
-    /** 网页把 5 行歌词用换行符拼成一串传过来（歌词本身不含换行，安全） */
+    private static final int ROWS = 8;
+    /** 当前句固定显示在第几行（0 起，第 4 行 = 中间偏上，上 3 下 4） */
+    private static final int CUR_ROW = 3;
+    /** 网页把 8 行歌词用换行符拼成一串传过来（歌词本身不含换行，安全） */
     private static final String SEP = "\n";
 
     private String title = "";
     private String artist = "";
-    private String[] lines = new String[]{"", "", "", "", ""};
+    private String[] lines = new String[]{"", "", "", "", "", "", "", ""};
     private int color = Color.WHITE;
 
     @Override
@@ -96,11 +98,12 @@ public class LyricService extends Service {
         rv.setTextViewText(R.id.n_title, title.isEmpty() ? getString(R.string.app_name) : title);
         rv.setTextViewText(R.id.n_artist, artist);
 
-        int[] ids = new int[]{R.id.n_l0, R.id.n_l1, R.id.n_l2, R.id.n_l3, R.id.n_l4};
+        int[] ids = new int[]{R.id.n_l0, R.id.n_l1, R.id.n_l2, R.id.n_l3,
+                R.id.n_l4, R.id.n_l5, R.id.n_l6, R.id.n_l7};
         for (int i = 0; i < ROWS; i++) {
             rv.setTextViewText(ids[i], lines[i]);
         }
-        // 中间那行是当前句：用网页选的颜色；全空时给个音符占位
+        // 当前句（中间那行）：用网页选的颜色；全空时给个音符占位
         boolean empty = true;
         for (String s : lines) {
             if (s != null && !s.trim().isEmpty()) {
@@ -108,8 +111,8 @@ public class LyricService extends Service {
                 break;
             }
         }
-        rv.setTextViewText(R.id.n_l2, empty ? "♪" : lines[2]);
-        rv.setTextColor(R.id.n_l2, color);
+        rv.setTextViewText(ids[CUR_ROW], empty ? "♪" : lines[CUR_ROW]);
+        rv.setTextColor(ids[CUR_ROW], color);
 
         Intent open = new Intent(this, MainActivity.class);
         open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);

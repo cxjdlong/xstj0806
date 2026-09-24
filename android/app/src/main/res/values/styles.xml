@@ -5,4 +5,39 @@
         <item name="android:statusBarColor">#0F0F0F</item>
         <item name="android:navigationBarColor">#0F0F0F</item>
     </style>
+
+    <!-- 锁屏歌词：当前句（大字，颜色由网页传入） -->
+    <style name="NLrcCur">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:maxLines">2</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">#FFFFFF</item>
+        <item name="android:text">" "</item>
+    </style>
+    <!-- 锁屏歌词：当前句附近的（小字） -->
+    <style name="NLrcNear">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">#99FFFFFF</item>
+        <item name="android:text">" "</item>
+    </style>
+    <!-- 锁屏歌词：最外两行（更淡） -->
+    <style name="NLrcFar">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">#66FFFFFF</item>
+        <item name="android:text">" "</item>
+    </style>
 </resources>

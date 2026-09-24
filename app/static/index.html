@@ -897,13 +897,14 @@ function paintColorBar() {
 }
 applyLrcColor();
 
-/** 把「当前句 + 前后各两句」推给 App（锁屏多行滚动歌词）；浏览器里没有 Android 对象会自动跳过 */
+/** 把「当前句 + 前后几行」推给 App（锁屏 8 行滚动歌词）；浏览器里没有 Android 对象会自动跳过 */
 function pushLyricToNative() {
   if (!window.Android || !Android.lyric) return;
   try {
     const idx = LRC.idx;
+    const UP = 3, ROWS = 8;       // 上面 3 行 + 当前句 + 下面 4 行
     const rows = [];
-    for (let k = -2; k <= 2; k++) {
+    for (let k = -UP; k < ROWS - UP; k++) {
       const j = idx + k;
       rows.push((j >= 0 && j < LRC.lines.length && LRC.lines[j]) ? LRC.lines[j].text : '');
     }
