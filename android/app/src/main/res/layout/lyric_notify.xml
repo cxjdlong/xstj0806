@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 锁屏/通知栏歌词卡片：背板 80% 透明（#33 ≈ 20% 不透明），8 行滚动（当前句在第 4 行居中高亮，越远越淡） -->
+<!-- 锁屏/通知栏歌词卡片：背板 80% 透明（#33 ≈ 20% 不透明），5 行（当前句在第 3 行居中、绿色高亮） -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/n_root"
     android:layout_width="match_parent"
@@ -40,12 +40,9 @@
             android:text="" />
     </LinearLayout>
 
-    <TextView android:id="@+id/n_l0" style="@style/NLrcFar"  android:layout_marginTop="8dp" />
-    <TextView android:id="@+id/n_l1" style="@style/NLrcNear" android:layout_marginTop="3dp" />
-    <TextView android:id="@+id/n_l2" style="@style/NLrcNear" android:layout_marginTop="3dp" />
-    <TextView android:id="@+id/n_l3" style="@style/NLrcCur"  android:layout_marginTop="5dp" />
-    <TextView android:id="@+id/n_l4" style="@style/NLrcNear" android:layout_marginTop="5dp" />
-    <TextView android:id="@+id/n_l5" style="@style/NLrcNear" android:layout_marginTop="3dp" />
-    <TextView android:id="@+id/n_l6" style="@style/NLrcNear" android:layout_marginTop="3dp" />
-    <TextView android:id="@+id/n_l7" style="@style/NLrcFar"  android:layout_marginTop="3dp" />
+    <TextView android:id="@+id/n_l0" style="@style/NLrcFar"  android:layout_marginTop="12dp" />
+    <TextView android:id="@+id/n_l1" style="@style/NLrcNear" android:layout_marginTop="5dp" />
+    <TextView android:id="@+id/n_l2" style="@style/NLrcCur"  android:layout_marginTop="8dp" />
+    <TextView android:id="@+id/n_l3" style="@style/NLrcNear" android:layout_marginTop="8dp" />
+    <TextView android:id="@+id/n_l4" style="@style/NLrcFar"  android:layout_marginTop="5dp" />
 </LinearLayout>
