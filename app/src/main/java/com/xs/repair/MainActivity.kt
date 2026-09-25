@@ -86,9 +86,55 @@ class MainActivity : AppCompatActivity() {
         cameraUri = null
     }
 
+    /** 点「拍照」但还没拿到相机权限 → 先申请，授权后接着开相机 */
+    private var pendingCamera = false
+
     private val cameraPerm = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { /* 拒绝也没关系：只影响「拍照」选项，相册仍可用 */ }
+    ) { granted ->
+        if (pendingCamera) {
+            pendingCamera = false
+            if (granted) {
+                val cam = buildCameraIntent()
+                if (cam != null) {
+                    try {
+                        fileChooser.launch(cam)
+                    } catch (e: Exception) {
+                        filePathCallback?.onReceiveValue(null)
+                        filePathCallback = null
+                        toast("相机打不开，请用「🖼 相册」选照片")
+                    }
+                } else {
+                    fallbackToAlbum("相机不可用，已切换到相册")
+                }
+            } else {
+                // 用户拒绝相机权限：别让这次点击白点，退回相册让他至少能选图
+                fallbackToAlbum("未开启相机权限，已切换到相册；要拍照请在系统设置里允许「手机维修」使用相机")
+            }
+        }
+    }
+
+    /** 退回相册选择（保证点击不落空） */
+    private fun fallbackToAlbum(msg: String) {
+        toast(msg)
+        openAlbumChooserInternal()
+    }
+
+    private fun openAlbumChooserInternal(): Boolean {
+        val content = Intent(Intent.ACTION_GET_CONTENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "image/*"
+            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+        }
+        val chooser = Intent.createChooser(content, "选择照片")
+        return try {
+            fileChooser.launch(chooser)
+            true
+        } catch (e: Exception) {
+            filePathCallback = null
+            false
+        }
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -315,6 +361,15 @@ class MainActivity : AppCompatActivity() {
 
                 // 网页写了 capture="environment"（点了「📷 拍照」）→ 直接开相机
                 if (params?.isCaptureEnabled == true) {
+                    if (ContextCompat.checkSelfPermission(
+                            this@MainActivity, Manifest.permission.CAMERA
+                        ) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        // 还没授权：先申请，授权后接着开相机（不要静默退化成相册）
+                        pendingCamera = true
+                        cameraPerm.launch(Manifest.permission.CAMERA)
+                        return true
+                    }
                     val cam = buildCameraIntent()
                     if (cam != null) {
                         return try {
@@ -322,31 +377,12 @@ class MainActivity : AppCompatActivity() {
                             true
                         } catch (e: Exception) {
                             filePathCallback = null
-                            openAlbumChooser()
+                            openAlbumChooserInternal()
                         }
                     }
+                    toast("相机不可用，已切换到相册")
                 }
-                return openAlbumChooser()
-            }
-
-            private fun openAlbumChooser(): Boolean {
-                val content = Intent(Intent.ACTION_GET_CONTENT).apply {
-                    addCategory(Intent.CATEGORY_OPENABLE)
-                    type = "image/*"
-                    putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-                }
-                val chooser = Intent.createChooser(content, "选择照片")
-                val camera = buildCameraIntent()
-                if (camera != null) {
-                    chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(camera))
-                }
-                return try {
-                    fileChooser.launch(chooser)
-                    true
-                } catch (e: Exception) {
-                    filePathCallback = null
-                    false
-                }
+                return openAlbumChooserInternal()
             }
 
             override fun onPermissionRequest(request: PermissionRequest?) {
