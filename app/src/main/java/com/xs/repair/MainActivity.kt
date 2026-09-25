@@ -35,6 +35,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * 「手机维修」App —— 全屏 WebView 壳，加载销售系统手机版界面（/#/m/home）。
@@ -51,6 +53,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progress: ProgressBar
     private lateinit var errorBox: LinearLayout
     private lateinit var errorMsg: TextView
+    private lateinit var urlNote: TextView
+
+    /** 当前正在用的地址（内网优先，失败可手动切外网） */
+    private var currentUrl = LAN_URL
 
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private var cameraUri: Uri? = null
@@ -93,7 +99,7 @@ class MainActivity : AppCompatActivity() {
             setOnRefreshListener { web.reload() }
         }
 
-        // 断网/加载失败时的重试页
+        // 断网/加载失败时的重试页（可手动在内网/外网地址间切换）
         errorBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = android.view.Gravity.CENTER
@@ -101,20 +107,34 @@ class MainActivity : AppCompatActivity() {
             setBackgroundColor(0xFFFFFFFF.toInt())
         }
         errorMsg = TextView(this).apply {
-            text = "打不开，请检查网络后重试"
+            text = "打不开，请检查网络"
             setTextColor(0xFF6B7280.toInt())
             textSize = 15f
+            gravity = android.view.Gravity.CENTER
+        }
+        urlNote = TextView(this).apply {
+            setTextColor(0xFF9AA1AE.toInt())
+            textSize = 12f
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, 12, 0, 18)
         }
         val retry = Button(this).apply {
             text = "重新加载"
-            setOnClickListener {
-                errorBox.visibility = View.GONE
-                web.visibility = View.VISIBLE
-                web.loadUrl(APP_URL)
-            }
+            setOnClickListener { switchTo(currentUrl) }
+        }
+        val useLan = Button(this).apply {
+            text = "用家里/店里的地址（内网）"
+            setOnClickListener { switchTo(LAN_URL) }
+        }
+        val useWan = Button(this).apply {
+            text = "用外网地址"
+            setOnClickListener { switchTo(WAN_URL) }
         }
         errorBox.addView(errorMsg)
+        errorBox.addView(urlNote)
         errorBox.addView(retry)
+        errorBox.addView(useLan)
+        errorBox.addView(useWan)
 
         swipe.addView(web, FrameLayout.LayoutParams(-1, -1))
         root.addView(swipe, FrameLayout.LayoutParams(-1, -1))
@@ -130,7 +150,33 @@ class MainActivity : AppCompatActivity() {
             cameraPerm.launch(Manifest.permission.CAMERA)
         }
 
-        web.loadUrl(APP_URL)
+        // 先探测家里/店里的内网地址，通了就用（快），不通自动走外网
+        pickBaseUrl()
+    }
+
+    /** 自动选地址：内网可达就用内网，否则用外网 */
+    private fun pickBaseUrl() {
+        Thread {
+            val lanOk = try {
+                val c = URL(LAN_PROBE).openConnection() as HttpURLConnection
+                c.connectTimeout = 1500
+                c.readTimeout = 1500
+                c.requestMethod = "GET"
+                val code = c.responseCode
+                c.disconnect()
+                code in 200..499
+            } catch (e: Exception) {
+                false
+            }
+            runOnUiThread { switchTo(if (lanOk) LAN_URL else WAN_URL) }
+        }.start()
+    }
+
+    private fun switchTo(url: String) {
+        currentUrl = url
+        errorBox.visibility = View.GONE
+        web.visibility = View.VISIBLE
+        web.loadUrl(url)
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -182,6 +228,8 @@ class MainActivity : AppCompatActivity() {
                 if (request?.isForMainFrame == true) {
                     swipe.isRefreshing = false
                     web.visibility = View.GONE
+                    errorMsg.text = "打不开，请检查网络"
+                    urlNote.text = "当前地址：" + currentUrl.substringBefore("/#/")
                     errorBox.visibility = View.VISIBLE
                 }
             }
@@ -289,7 +337,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        /** 手机版界面地址（lucky 反代 → NAS 上的销售系统正式版） */
-        private const val APP_URL = "https://xs.dx66.top:8888/#/m/home"
+        /** 家里/店里内网地址（优先，快） */
+        private const val LAN_URL = "http://192.168.10.10:19117/#/m/home"
+        /** 外网地址（内网不通时用；该域名目前只有 IPv6 解析，手机需支持 IPv6 才连得上） */
+        private const val WAN_URL = "https://xs.dx66.top:8888/#/m/home"
+        /** 内网连通性探测用 */
+        private const val LAN_PROBE = "http://192.168.10.10:19117/"
     }
 }
