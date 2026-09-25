@@ -201,6 +201,23 @@ class MainActivity : AppCompatActivity() {
                 filePathCallback?.onReceiveValue(null)
                 filePathCallback = callback
 
+                // 网页里写了 capture="environment"（点了「📷 拍照」按钮）→ 直接开相机，不再弹选择器
+                if (params?.isCaptureEnabled == true) {
+                    val cam = buildCameraIntent()
+                    if (cam != null) {
+                        return try {
+                            fileChooser.launch(cam)
+                            true
+                        } catch (e: Exception) {
+                            filePathCallback = null
+                            openAlbumChooser()   // 相机不可用就退回相册
+                        }
+                    }
+                }
+                return openAlbumChooser()
+            }
+
+            private fun openAlbumChooser(): Boolean {
                 val content = Intent(Intent.ACTION_GET_CONTENT).apply {
                     addCategory(Intent.CATEGORY_OPENABLE)
                     type = "image/*"
