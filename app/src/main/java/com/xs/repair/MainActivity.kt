@@ -42,13 +42,17 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import org.json.JSONObject
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * 「手机维修」App —— 全屏 WebView 壳。
  *
- * 服务器地址**不内置**：首次打开让用户自己填（填过就记住，以后直接进）。
- * 需要换服务器时，从错误页点「修改服务器地址」即可。
+ * 服务器地址 + 用户名 + 密码**在同一个界面**填写：填完点「登录并进入」，
+ * App 直接调后端登录接口拿登录态注入网页，不用再在网页上登一次。
+ * 需要换服务器/换账号时，从错误页点「修改服务器地址」回到这个界面。
  *
  * 其它：登录态持久化；支持网页里的传照片（相册多选 / 直接拍照）；下拉刷新；返回键回退。
  */
@@ -62,6 +66,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var urlNote: TextView
     private lateinit var setupBox: LinearLayout
     private lateinit var serverInput: EditText
+    private lateinit var userInput: EditText
+    private lateinit var pwdInput: EditText
+
+    /** 登录成功后待注入网页的登录态（token to userJson），在页面加载完时塞进 localStorage */
+    private var pendingAuth: Pair<String, String>? = null
 
     /** 用户填的服务器地址（形如 http://192.168.10.10:19117），空表示还没填 */
     private var serverUrl: String = ""
@@ -214,7 +223,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** 服务器地址填写界面 */
+    /** 服务器地址填写界面（服务器地址 + 用户名 + 密码，一个界面填完直接登录） */
     private fun buildSetupView(): LinearLayout {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -231,48 +240,128 @@ class MainActivity : AppCompatActivity() {
             setTypeface(typeface, Typeface.BOLD)
         }
         val sub = TextView(this).apply {
-            text = "请填写服务器地址"
+            text = "填服务器地址和账号，登录后直接进系统"
             textSize = 14f
             setTextColor(0xFF6B7280.toInt())
             gravity = Gravity.CENTER
             setPadding(0, 14, 0, 22)
         }
         serverInput = EditText(this).apply {
-            hint = "例如  192.168.10.10:19117"
+            hint = "服务器地址，例如 192.168.10.10:19117"
             textSize = 15f
             setSingleLine(true)
             inputType = InputType.TYPE_TEXT_VARIATION_URI
             setPadding(28, 30, 28, 30)
         }
+        userInput = EditText(this).apply {
+            hint = "用户名"
+            textSize = 15f
+            setSingleLine(true)
+            inputType = InputType.TYPE_CLASS_TEXT
+            setPadding(28, 30, 28, 30)
+        }
+        pwdInput = EditText(this).apply {
+            hint = "密码"
+            textSize = 15f
+            setSingleLine(true)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setPadding(28, 30, 28, 30)
+        }
         val tip = TextView(this).apply {
-            text = "在店里/家里填内网地址（如 192.168.10.10:19117）；\n在外面填外网域名（如 xs.dx66.top:8888）。\n填好后会自动记住，下次直接进。"
+            text = "在店里填内网地址（如 192.168.10.10:19117）；\n在外面填外网域名（如 xs.dx66.top:8888）。\n登录成功后自动记住，下次打开直接进系统。"
             textSize = 12f
             setTextColor(0xFF9AA1AE.toInt())
             gravity = Gravity.CENTER
             setPadding(0, 16, 0, 24)
         }
         val save = Button(this).apply {
-            text = "保存并打开"
+            text = "登录并进入"
             setOnClickListener {
                 val v = serverInput.text.toString().trim()
+                val u = userInput.text.toString().trim()
+                val p = pwdInput.text.toString()
                 if (v.isBlank()) {
                     toast("请填写服务器地址")
                     return@setOnClickListener
                 }
-                loadServer(v)
+                if (u.isBlank() || p.isBlank()) {
+                    toast("请填写用户名和密码")
+                    return@setOnClickListener
+                }
+                doLogin(normalize(v), u, p)
             }
         }
         box.addView(title)
         box.addView(sub)
         box.addView(serverInput, LinearLayout.LayoutParams(-1, -2))
+        box.addView(userInput, LinearLayout.LayoutParams(-1, -2))
+        box.addView(pwdInput, LinearLayout.LayoutParams(-1, -2))
         box.addView(tip)
         box.addView(save, LinearLayout.LayoutParams(-1, -2))
         return box
     }
 
+    /** 用填的地址 + 账号调后端登录接口，成功就把登录态注入网页（不用再在网页上登一次） */
+    private fun doLogin(base: String, username: String, password: String) {
+        loginBtnEnabled(false)
+        toast("正在登录…")
+        Thread {
+            var ok = false
+            var errMsg = "登录失败"
+            var token = ""
+            var userJson = ""
+            try {
+                val conn = (URL("$base/api/auth/login").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    doOutput = true
+                    connectTimeout = 10000
+                    readTimeout = 20000
+                    setRequestProperty("Content-Type", "application/json")
+                }
+                val body = JSONObject().put("username", username).put("password", password).toString()
+                conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                val code = conn.responseCode
+                val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                    ?.bufferedReader()?.use { it.readText() }.orEmpty()
+                val json = JSONObject(text)
+                if (code in 200..299 && json.optInt("code", -1) == 0) {
+                    val data = json.getJSONObject("data")
+                    token = data.getString("token")
+                    userJson = data.get("user").toString()
+                    ok = true
+                } else {
+                    errMsg = json.optString("msg", "用户名或密码不对")
+                }
+            } catch (e: Exception) {
+                errMsg = "连不上服务器：" + (e.message ?: "网络错误")
+            }
+            runOnUiThread {
+                loginBtnEnabled(true)
+                if (ok) {
+                    prefs.edit()
+                        .putString(KEY_SERVER, base)
+                        .putString(KEY_USER, username)
+                        .apply()
+                    serverUrl = base
+                    pendingAuth = token to userJson
+                    toast("登录成功")
+                    loadServer(base)
+                } else {
+                    toast(errMsg)
+                }
+            }
+        }.start()
+    }
+
+    private fun loginBtnEnabled(enabled: Boolean) {
+        setupBox.getChildAt(setupBox.childCount - 1)?.let { it.isEnabled = enabled }
+    }
+
     private fun showSetup() {
         serverInput.setText(serverUrl)
         serverInput.setSelection(serverInput.text.length)
+        userInput.setText(prefs.getString(KEY_USER, "").orEmpty())
+        pwdInput.setText("")
         setupBox.visibility = View.VISIBLE
         swipe.visibility = View.GONE
         errorBox.visibility = View.GONE
@@ -335,6 +424,15 @@ class MainActivity : AppCompatActivity() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 swipe.isRefreshing = false
+                // 刚在 App 界面登录成功 → 把登录态写进网页（省掉再登一次）
+                val auth = pendingAuth
+                if (auth != null && view != null) {
+                    pendingAuth = null
+                    val js = "localStorage.setItem('token', ${JSONObject.quote(auth.first)});" +
+                        "localStorage.setItem('user', ${JSONObject.quote(auth.second)});" +
+                        "location.replace('/#/m/home');"
+                    view.evaluateJavascript(js, null)
+                }
             }
 
             override fun onReceivedError(
@@ -559,6 +657,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val KEY_SERVER = "server_url"
+        private const val KEY_USER = "last_user"
         /** 打开后直接进手机版界面 */
         private const val HOME_PATH = "/#/m/home"
     }
