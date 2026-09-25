@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.DownloadManager
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -12,12 +13,15 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.provider.MediaStore
 import android.text.InputType
+import android.util.Base64
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.DownloadListener
+import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -311,6 +315,8 @@ class MainActivity : AppCompatActivity() {
         }
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
+        // 给网页暴露原生的「存相册 / 分享到微信」能力（WebView 里没有 navigator.share）
+        web.addJavascriptInterface(XsBridge(), "XsBridge")
 
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
@@ -404,6 +410,105 @@ class MainActivity : AppCompatActivity() {
                 toast("下载失败")
             }
         })
+    }
+
+    /* ================= 给网页用的原生桥 =================
+     * WebView 里既没有 navigator.share（Web Share API 不被 WebView 支持），
+     * 「保存到本地」的 <a download> 对 blob: 也无效（DownloadManager 不认 blob:）
+     * → 所以这两个能力由原生实现，网页通过 window.XsBridge 调用：
+     *   XsBridge.saveImage(base64, filename)              存到手机相册
+     *   XsBridge.shareImage(base64, filename, toWechat)   调起微信（失败退系统分享面板）发图
+     */
+    inner class XsBridge {
+        @JavascriptInterface
+        fun saveImage(base64: String, filename: String): Boolean {
+            return try {
+                saveToGallery(Base64.decode(base64, Base64.DEFAULT), safeName(filename))
+                toast("已保存到相册")
+                true
+            } catch (e: Exception) {
+                toast("保存失败：" + (e.message ?: "未知错误"))
+                false
+            }
+        }
+
+        @JavascriptInterface
+        fun shareImage(base64: String, filename: String, toWechat: Boolean): Boolean {
+            return try {
+                val f = File(cacheDir, safeName(filename))
+                f.writeBytes(Base64.decode(base64, Base64.DEFAULT))
+                val uri = FileProvider.getUriForFile(
+                    this@MainActivity, "$packageName.fileprovider", f
+                )
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "image/png"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                if (toWechat) {
+                    try {
+                        startActivity(Intent(send).setPackage("com.tencent.mm"))
+                        return true
+                    } catch (e: Exception) {
+                        toast("没找到微信，已改用系统分享")
+                    }
+                }
+                startActivity(Intent.createChooser(send, "分享维修单"))
+                true
+            } catch (e: Exception) {
+                toast("分享失败：" + (e.message ?: "未知错误"))
+                false
+            }
+        }
+
+        /** 网页里弹原生提示（可选） */
+        @JavascriptInterface
+        fun toastMsg(msg: String) {
+            toast(msg)
+        }
+    }
+
+    /** 文件名安全化（去掉路径分隔符等非法字符） */
+    private fun safeName(name: String): String {
+        val n = name.ifBlank { "repair_${System.currentTimeMillis()}.png" }
+        return n.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(60)
+    }
+
+    /** 写入系统相册：Android 10+ 走 MediaStore（免存储权限），以下走公共 Pictures 目录 */
+    private fun saveToGallery(bytes: ByteArray, filename: String) {
+        val lower = filename.lowercase()
+        val name = if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg")) filename else "$filename.png"
+        val mime = if (name.lowercase().endsWith(".png")) "image/png" else "image/jpeg"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, name)
+                put(MediaStore.Images.Media.MIME_TYPE, mime)
+                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/手机维修")
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+            val resolver = contentResolver
+            val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                ?: throw IllegalStateException("无法写入相册")
+            resolver.openOutputStream(uri)?.use { it.write(bytes) }
+                ?: throw IllegalStateException("无法写入相册")
+            values.clear()
+            values.put(MediaStore.Images.Media.IS_PENDING, 0)
+            resolver.update(uri, values, null, null)
+        } else {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                throw IllegalStateException("请先在系统设置里允许「手机维修」使用存储")
+            }
+            @Suppress("DEPRECATION")
+            val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), "手机维修")
+            if (!dir.exists()) dir.mkdirs()
+            val out = File(dir, name)
+            out.writeBytes(bytes)
+            // 让相册立刻看到
+            @Suppress("DEPRECATION")
+            sendBroadcast(Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, Uri.fromFile(out)))
+        }
     }
 
     private fun buildCameraIntent(): Intent? {
