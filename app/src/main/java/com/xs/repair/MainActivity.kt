@@ -7,10 +7,13 @@ import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.text.InputType
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.webkit.CookieManager
@@ -24,6 +27,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -35,16 +39,14 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
 
 /**
- * 「手机维修」App —— 全屏 WebView 壳，加载销售系统手机版界面（/#/m/home）。
+ * 「手机维修」App —— 全屏 WebView 壳。
  *
- * 关键点：
- * - 登录态（cookie / localStorage）默认持久化，不用反复登录
- * - 支持网页里的 <input type="file">：可选相册多张、也可直接拍照（维修留痕传照片必需）
- * - 下拉刷新、返回键回退、加载进度条、断网重试
+ * 服务器地址**不内置**：首次打开让用户自己填（填过就记住，以后直接进）。
+ * 需要换服务器时，从错误页点「修改服务器地址」即可。
+ *
+ * 其它：登录态持久化；支持网页里的传照片（相册多选 / 直接拍照）；下拉刷新；返回键回退。
  */
 class MainActivity : AppCompatActivity() {
 
@@ -54,9 +56,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var errorBox: LinearLayout
     private lateinit var errorMsg: TextView
     private lateinit var urlNote: TextView
+    private lateinit var setupBox: LinearLayout
+    private lateinit var serverInput: EditText
 
-    /** 当前正在用的地址（内网优先，失败可手动切外网） */
-    private var currentUrl = LAN_URL
+    /** 用户填的服务器地址（形如 http://192.168.10.10:19117），空表示还没填 */
+    private var serverUrl: String = ""
+
+    private val prefs by lazy { getSharedPreferences("app", Context.MODE_PRIVATE) }
 
     private var filePathCallback: ValueCallback<Array<Uri>>? = null
     private var cameraUri: Uri? = null
@@ -96,50 +102,50 @@ class MainActivity : AppCompatActivity() {
         }
         swipe = SwipeRefreshLayout(this).apply {
             setColorSchemeColors(0xFF2563EB.toInt())
-            setOnRefreshListener { web.reload() }
+            setOnRefreshListener { if (serverUrl.isNotBlank()) web.reload() }
         }
 
-        // 断网/加载失败时的重试页（可手动在内网/外网地址间切换）
+        // 打不开时的提示页
         errorBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = android.view.Gravity.CENTER
+            gravity = Gravity.CENTER
             visibility = View.GONE
             setBackgroundColor(0xFFFFFFFF.toInt())
+            setPadding(60, 0, 60, 0)
         }
         errorMsg = TextView(this).apply {
             text = "打不开，请检查网络"
             setTextColor(0xFF6B7280.toInt())
             textSize = 15f
-            gravity = android.view.Gravity.CENTER
+            gravity = Gravity.CENTER
         }
         urlNote = TextView(this).apply {
             setTextColor(0xFF9AA1AE.toInt())
             textSize = 12f
-            gravity = android.view.Gravity.CENTER
-            setPadding(0, 12, 0, 18)
+            gravity = Gravity.CENTER
+            setPadding(0, 12, 0, 20)
         }
         val retry = Button(this).apply {
             text = "重新加载"
-            setOnClickListener { switchTo(currentUrl) }
+            setOnClickListener { if (serverUrl.isNotBlank()) loadServer(serverUrl) }
         }
-        val useLan = Button(this).apply {
-            text = "用家里/店里的地址（内网）"
-            setOnClickListener { switchTo(LAN_URL) }
-        }
-        val useWan = Button(this).apply {
-            text = "用外网地址"
-            setOnClickListener { switchTo(WAN_URL) }
+        val editServer = Button(this).apply {
+            text = "修改服务器地址"
+            setOnClickListener { showSetup() }
         }
         errorBox.addView(errorMsg)
         errorBox.addView(urlNote)
         errorBox.addView(retry)
-        errorBox.addView(useLan)
-        errorBox.addView(useWan)
+        errorBox.addView(editServer)
+
+        // 服务器地址填写页（第一次打开时显示）
+        setupBox = buildSetupView()
 
         swipe.addView(web, FrameLayout.LayoutParams(-1, -1))
         root.addView(swipe, FrameLayout.LayoutParams(-1, -1))
         root.addView(progress, FrameLayout.LayoutParams(-1, 8))
         root.addView(errorBox, FrameLayout.LayoutParams(-1, -1))
+        root.addView(setupBox, FrameLayout.LayoutParams(-1, -1))
         setContentView(root)
 
         setupWebView()
@@ -150,33 +156,93 @@ class MainActivity : AppCompatActivity() {
             cameraPerm.launch(Manifest.permission.CAMERA)
         }
 
-        // 先探测家里/店里的内网地址，通了就用（快），不通自动走外网
-        pickBaseUrl()
+        serverUrl = prefs.getString(KEY_SERVER, "").orEmpty()
+        if (serverUrl.isBlank()) {
+            showSetup()          // 第一次用：先填服务器地址
+        } else {
+            loadServer(serverUrl)
+        }
     }
 
-    /** 自动选地址：内网可达就用内网，否则用外网 */
-    private fun pickBaseUrl() {
-        Thread {
-            val lanOk = try {
-                val c = URL(LAN_PROBE).openConnection() as HttpURLConnection
-                c.connectTimeout = 1500
-                c.readTimeout = 1500
-                c.requestMethod = "GET"
-                val code = c.responseCode
-                c.disconnect()
-                code in 200..499
-            } catch (e: Exception) {
-                false
+    /** 服务器地址填写界面 */
+    private fun buildSetupView(): LinearLayout {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setBackgroundColor(0xFFFFFFFF.toInt())
+            setPadding(70, 0, 70, 0)
+            visibility = View.GONE
+        }
+        val title = TextView(this).apply {
+            text = "手机维修"
+            textSize = 24f
+            setTextColor(0xFF2563EB.toInt())
+            gravity = Gravity.CENTER
+            setTypeface(typeface, Typeface.BOLD)
+        }
+        val sub = TextView(this).apply {
+            text = "请填写服务器地址"
+            textSize = 14f
+            setTextColor(0xFF6B7280.toInt())
+            gravity = Gravity.CENTER
+            setPadding(0, 14, 0, 22)
+        }
+        serverInput = EditText(this).apply {
+            hint = "例如  192.168.10.10:19117"
+            textSize = 15f
+            setSingleLine(true)
+            inputType = InputType.TYPE_TEXT_VARIATION_URI
+            setPadding(28, 30, 28, 30)
+        }
+        val tip = TextView(this).apply {
+            text = "在店里/家里填内网地址（如 192.168.10.10:19117）；\n在外面填外网域名（如 xs.dx66.top:8888）。\n填好后会自动记住，下次直接进。"
+            textSize = 12f
+            setTextColor(0xFF9AA1AE.toInt())
+            gravity = Gravity.CENTER
+            setPadding(0, 16, 0, 24)
+        }
+        val save = Button(this).apply {
+            text = "保存并打开"
+            setOnClickListener {
+                val v = serverInput.text.toString().trim()
+                if (v.isBlank()) {
+                    toast("请填写服务器地址")
+                    return@setOnClickListener
+                }
+                loadServer(v)
             }
-            runOnUiThread { switchTo(if (lanOk) LAN_URL else WAN_URL) }
-        }.start()
+        }
+        box.addView(title)
+        box.addView(sub)
+        box.addView(serverInput, LinearLayout.LayoutParams(-1, -2))
+        box.addView(tip)
+        box.addView(save, LinearLayout.LayoutParams(-1, -2))
+        return box
     }
 
-    private fun switchTo(url: String) {
-        currentUrl = url
+    private fun showSetup() {
+        serverInput.setText(serverUrl)
+        serverInput.setSelection(serverInput.text.length)
+        setupBox.visibility = View.VISIBLE
+        swipe.visibility = View.GONE
         errorBox.visibility = View.GONE
-        web.visibility = View.VISIBLE
-        web.loadUrl(url)
+    }
+
+    /** 补全协议头并去掉结尾斜杠 */
+    private fun normalize(raw: String): String {
+        var s = raw.trim()
+        if (!s.startsWith("http://") && !s.startsWith("https://")) s = "http://$s"
+        return s.trimEnd('/')
+    }
+
+    private fun loadServer(raw: String) {
+        val base = normalize(raw)
+        serverUrl = base
+        prefs.edit().putString(KEY_SERVER, base).apply()
+        setupBox.visibility = View.GONE
+        errorBox.visibility = View.GONE
+        swipe.visibility = View.VISIBLE
+        web.loadUrl(base + HOME_PATH)
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -191,7 +257,7 @@ class MainActivity : AppCompatActivity() {
         s.cacheMode = WebSettings.LOAD_DEFAULT
         s.mediaPlaybackRequiresUserGesture = false
         s.allowFileAccess = true
-        // 让 window.open / target=_blank 在同一 WebView 内打开（报价单打印等）
+        // 让 window.open / target=_blank 在同一 WebView 内打开
         s.setSupportMultipleWindows(false)
         s.javaScriptCanOpenWindowsAutomatically = true
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -203,7 +269,6 @@ class MainActivity : AppCompatActivity() {
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
-                // 站外链接（http/https 之外，如 tel: / mailto:）交给系统
                 if (!url.startsWith("http")) {
                     return try {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
@@ -224,12 +289,11 @@ class MainActivity : AppCompatActivity() {
                 view: WebView?, request: WebResourceRequest?, error: WebResourceError?
             ) {
                 super.onReceivedError(view, request, error)
-                // 只处理主页面失败
                 if (request?.isForMainFrame == true) {
                     swipe.isRefreshing = false
-                    web.visibility = View.GONE
+                    swipe.visibility = View.GONE
                     errorMsg.text = "打不开，请检查网络"
-                    urlNote.text = "当前地址：" + currentUrl.substringBefore("/#/")
+                    urlNote.text = "当前服务器：" + serverUrl
                     errorBox.visibility = View.VISIBLE
                 }
             }
@@ -249,7 +313,7 @@ class MainActivity : AppCompatActivity() {
                 filePathCallback?.onReceiveValue(null)
                 filePathCallback = callback
 
-                // 网页里写了 capture="environment"（点了「📷 拍照」按钮）→ 直接开相机，不再弹选择器
+                // 网页写了 capture="environment"（点了「📷 拍照」）→ 直接开相机
                 if (params?.isCaptureEnabled == true) {
                     val cam = buildCameraIntent()
                     if (cam != null) {
@@ -258,7 +322,7 @@ class MainActivity : AppCompatActivity() {
                             true
                         } catch (e: Exception) {
                             filePathCallback = null
-                            openAlbumChooser()   // 相机不可用就退回相册
+                            openAlbumChooser()
                         }
                     }
                 }
@@ -286,7 +350,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onPermissionRequest(request: PermissionRequest?) {
-                // 网页里如果请求摄像头/麦克风，直接放行（本机自用）
                 request?.grant(request.resources)
             }
         }
@@ -325,11 +388,28 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK && web.canGoBack()) {
-            web.goBack()
-            return true
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            if (setupBox.visibility == View.VISIBLE) {
+                if (serverUrl.isNotBlank()) showWebAgain()
+                return true
+            }
+            if (errorBox.visibility == View.VISIBLE && serverUrl.isNotBlank()) {
+                showWebAgain()
+                return true
+            }
+            if (web.canGoBack()) {
+                web.goBack()
+                return true
+            }
         }
         return super.onKeyDown(keyCode, event)
+    }
+
+    /** 从设置/错误页回到网页 */
+    private fun showWebAgain() {
+        setupBox.visibility = View.GONE
+        errorBox.visibility = View.GONE
+        swipe.visibility = View.VISIBLE
     }
 
     private fun toast(msg: String) {
@@ -337,11 +417,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        /** 家里/店里内网地址（优先，快） */
-        private const val LAN_URL = "http://192.168.10.10:19117/#/m/home"
-        /** 外网地址（内网不通时用；该域名目前只有 IPv6 解析，手机需支持 IPv6 才连得上） */
-        private const val WAN_URL = "https://xs.dx66.top:8888/#/m/home"
-        /** 内网连通性探测用 */
-        private const val LAN_PROBE = "http://192.168.10.10:19117/"
+        private const val KEY_SERVER = "server_url"
+        /** 打开后直接进手机版界面 */
+        private const val HOME_PATH = "/#/m/home"
     }
 }
