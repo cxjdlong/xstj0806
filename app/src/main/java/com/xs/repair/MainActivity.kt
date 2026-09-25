@@ -247,11 +247,14 @@ class MainActivity : AppCompatActivity() {
             setPadding(0, 14, 0, 22)
         }
         serverInput = EditText(this).apply {
-            hint = "服务器地址，例如 192.168.10.10:19117"
+            hint = "服务器地址"
             textSize = 15f
             setSingleLine(true)
             inputType = InputType.TYPE_TEXT_VARIATION_URI
             setPadding(28, 30, 28, 30)
+            // 输入框默认留 https:// 前缀，用户往后补地址就行
+            setText("https://")
+            setSelection(text.length)
         }
         userInput = EditText(this).apply {
             hint = "用户名"
@@ -268,7 +271,7 @@ class MainActivity : AppCompatActivity() {
             setPadding(28, 30, 28, 30)
         }
         val tip = TextView(this).apply {
-            text = "在店里填内网地址（如 192.168.10.10:19117）；\n在外面填外网域名（如 xs.dx66.top:8888）。\n登录成功后自动记住，下次打开直接进系统。"
+            text = "在 https:// 后面补上服务器地址即可。\n登录成功后自动记住，下次打开直接进系统。"
             textSize = 12f
             setTextColor(0xFF9AA1AE.toInt())
             gravity = Gravity.CENTER
@@ -280,7 +283,8 @@ class MainActivity : AppCompatActivity() {
                 val v = serverInput.text.toString().trim()
                 val u = userInput.text.toString().trim()
                 val p = pwdInput.text.toString()
-                if (v.isBlank()) {
+                val base = normalize(v)
+                if (base.removePrefix("https://").removePrefix("http://").isBlank()) {
                     toast("请填写服务器地址")
                     return@setOnClickListener
                 }
@@ -288,7 +292,7 @@ class MainActivity : AppCompatActivity() {
                     toast("请填写用户名和密码")
                     return@setOnClickListener
                 }
-                doLogin(normalize(v), u, p)
+                doLogin(base, u, p)
             }
         }
         box.addView(title)
@@ -358,7 +362,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showSetup() {
-        serverInput.setText(serverUrl)
+        serverInput.setText(if (serverUrl.isBlank()) "https://" else serverUrl)
         serverInput.setSelection(serverInput.text.length)
         userInput.setText(prefs.getString(KEY_USER, "").orEmpty())
         pwdInput.setText("")
