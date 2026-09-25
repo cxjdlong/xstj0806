@@ -9,6 +9,9 @@ concurrency:
   group: build-apk-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -61,3 +64,23 @@ jobs:
         with:
           name: phone-repair-debug-apk
           path: app/build/outputs/apk/debug/*.apk
+
+      - name: Rename APK
+        run: |
+          mkdir -p out
+          cp app/build/outputs/apk/debug/*.apk out/手机维修.apk
+          ls -la out/
+
+      # 发布到 Release：免登录直链，方便 NAS/手机直接下载（artifact 下载需要 GitHub 登录）
+      - name: Publish to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: repair-app-${{ github.run_number }}
+          name: 手机维修 App ${{ github.run_number }}（v1.3.0）
+          body: |
+            自动构建的「手机维修」App（debug 签名，直接安装）。
+            - 新增：点「分享 / 发微信」直接调起微信选好友发维修单图片；「保存到本地」存手机相册
+            - 新增：开单/维修记录防重复提交，表单内容自动保存不丢
+          files: out/手机维修.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
