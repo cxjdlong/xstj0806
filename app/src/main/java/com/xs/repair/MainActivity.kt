@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -68,6 +69,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var serverInput: EditText
     private lateinit var userInput: EditText
     private lateinit var pwdInput: EditText
+    private lateinit var loginBtn: Button
 
     /** 登录成功后待注入网页的登录态（token to userJson），在页面加载完时塞进 localStorage */
     private var pendingAuth: Pair<String, String>? = null
@@ -223,18 +225,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** 服务器地址填写界面（服务器地址 + 用户名 + 密码，一个界面填完直接登录） */
+    /** 登录界面：大标题 + 三行大输入框（服务器地址 / 用户名 / 密码）+ 蓝色大按钮，样式对齐网页登录页 */
     private fun buildSetupView(): LinearLayout {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setBackgroundColor(0xFFFFFFFF.toInt())
-            setPadding(70, 0, 70, 0)
+            setBackgroundColor(0xFFF3F5F9.toInt())
+            setPadding(dp(26), 0, dp(26), 0)
             visibility = View.GONE
         }
         val title = TextView(this).apply {
             text = "手机维修"
-            textSize = 24f
+            textSize = 26f
             setTextColor(0xFF2563EB.toInt())
             gravity = Gravity.CENTER
             setTypeface(typeface, Typeface.BOLD)
@@ -244,41 +246,29 @@ class MainActivity : AppCompatActivity() {
             textSize = 14f
             setTextColor(0xFF6B7280.toInt())
             gravity = Gravity.CENTER
-            setPadding(0, 14, 0, 22)
+            setPadding(0, dp(10), 0, dp(24))
         }
-        serverInput = EditText(this).apply {
-            hint = "服务器地址"
-            textSize = 15f
-            setSingleLine(true)
-            inputType = InputType.TYPE_TEXT_VARIATION_URI
-            setPadding(28, 30, 28, 30)
+        serverInput = bigInput("服务器地址", InputType.TYPE_TEXT_VARIATION_URI).apply {
             // 输入框默认留 https:// 前缀，用户往后补地址就行
             setText("https://")
             setSelection(text.length)
         }
-        userInput = EditText(this).apply {
-            hint = "用户名"
-            textSize = 15f
-            setSingleLine(true)
-            inputType = InputType.TYPE_CLASS_TEXT
-            setPadding(28, 30, 28, 30)
-        }
-        pwdInput = EditText(this).apply {
-            hint = "密码"
-            textSize = 15f
-            setSingleLine(true)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            setPadding(28, 30, 28, 30)
-        }
+        userInput = bigInput("用户名")
+        pwdInput = bigInput("密码", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
         val tip = TextView(this).apply {
             text = "在 https:// 后面补上服务器地址即可。\n登录成功后自动记住，下次打开直接进系统。"
             textSize = 12f
             setTextColor(0xFF9AA1AE.toInt())
             gravity = Gravity.CENTER
-            setPadding(0, 16, 0, 24)
+            setPadding(0, dp(16), 0, dp(20))
         }
-        val save = Button(this).apply {
-            text = "登录并进入"
+        loginBtn = Button(this).apply {
+            text = "登 录"
+            textSize = 17f
+            isAllCaps = false
+            setTextColor(0xFFFFFFFF.toInt())
+            background = roundedBg(0xFF2563EB.toInt())
+            stateListAnimator = null
             setOnClickListener {
                 val v = serverInput.text.toString().trim()
                 val u = userInput.text.toString().trim()
@@ -297,13 +287,37 @@ class MainActivity : AppCompatActivity() {
         }
         box.addView(title)
         box.addView(sub)
-        box.addView(serverInput, LinearLayout.LayoutParams(-1, -2))
-        box.addView(userInput, LinearLayout.LayoutParams(-1, -2))
-        box.addView(pwdInput, LinearLayout.LayoutParams(-1, -2))
+        box.addView(serverInput, inputParams())
+        box.addView(userInput, inputParams())
+        box.addView(pwdInput, inputParams())
         box.addView(tip)
-        box.addView(save, LinearLayout.LayoutParams(-1, -2))
+        box.addView(loginBtn, LinearLayout.LayoutParams(-1, dp(50)))
         return box
     }
+
+    // ---------- 小工具：dp 换算 / 圆角背景 / 大输入框 ----------
+    private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+    private fun roundedBg(fill: Int, strokeColor: Int? = null): GradientDrawable =
+        GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = 12f * resources.displayMetrics.density
+            setColor(fill)
+            strokeColor?.let { setStroke((1.5f * resources.displayMetrics.density).toInt(), it) }
+        }
+
+    private fun bigInput(hintText: String, inputTypeValue: Int = InputType.TYPE_CLASS_TEXT): EditText =
+        EditText(this).apply {
+            hint = hintText
+            textSize = 16f
+            setSingleLine(true)
+            inputType = inputTypeValue
+            background = roundedBg(0xFFFFFFFF.toInt(), 0xFFDDE2EC.toInt())
+            setPadding(dp(16), dp(15), dp(16), dp(15))
+        }
+
+    private fun inputParams(): LinearLayout.LayoutParams =
+        LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) }
 
     /** 用填的地址 + 账号调后端登录接口，成功就把登录态注入网页（不用再在网页上登一次） */
     private fun doLogin(base: String, username: String, password: String) {
@@ -358,7 +372,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loginBtnEnabled(enabled: Boolean) {
-        setupBox.getChildAt(setupBox.childCount - 1)?.let { it.isEnabled = enabled }
+        if (::loginBtn.isInitialized) {
+            loginBtn.isEnabled = enabled
+            loginBtn.alpha = if (enabled) 1f else 0.6f
+        }
     }
 
     private fun showSetup() {
@@ -434,7 +451,10 @@ class MainActivity : AppCompatActivity() {
                     pendingAuth = null
                     val js = "localStorage.setItem('token', ${JSONObject.quote(auth.first)});" +
                         "localStorage.setItem('user', ${JSONObject.quote(auth.second)});" +
-                        "location.replace('/#/m/home');"
+                        "location.replace('/#/m/home');" +
+                        // ⚠️ 只改 hash 不会让 SPA 重新初始化（store 还是"未登录"），必须强制重载一次，
+                        //    否则会先闪一下网页登录页、看起来像要登两次
+                        "location.reload();"
                     view.evaluateJavascript(js, null)
                 }
             }

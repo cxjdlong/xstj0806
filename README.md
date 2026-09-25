@@ -16,7 +16,11 @@
 - 站外链接（tel: 等）交给系统处理
 
 ## 编译（本机无 Android SDK，走 GitHub Actions）
-推送到本仓库的 `repair-app` 分支即自动构建（`.github/workflows/build-apk.yml`，`assembleDebug` 自带 debug 签名，可直接安装）。
+推送到本仓库的 `repair-app` 分支即自动构建（`.github/workflows/build-apk.yml`）。
+
+**签名已固定**：`keystore/app.p12`（alias `xsrepair`，口令 `xsrepair2026`，有效期 100 年）。
+以前用 CI 自动生成的 debug 签名，**每次打包签名都不一样 → 手机装新版必须先卸载旧版**（还会丢登录态和记住的服务器地址）。
+现在 debug/release 都用这个固定签名，以后**直接覆盖安装升级**即可。
 
 下载路径：**Release 直链**（免登录）：https://github.com/cxjdlong/xstj0806/releases/latest ；或 GitHub 仓库 → **Actions** → 最新一次成功的 run → 底部 **Artifacts** → `phone-repair-debug-apk`。
 ⚠️ 下载到的是 **zip**，先解压出 `app-debug.apk` 再传到手机安装（直接把 zip 当 apk 装会报「解析包错误」）。
