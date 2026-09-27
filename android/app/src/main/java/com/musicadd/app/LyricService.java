@@ -343,12 +343,17 @@ public class LyricService extends Service {
         Bitmap cover = (coverBmp != null) ? coverBmp : fallbackCover();
         if (cover != null) rv.setImageViewBitmap(R.id.n_cover, cover);
 
-        // 歌词行：文字色 + 淡底色都跟随 App 里选的歌词颜色
+        // 歌词行：文字色 + 淡底色都跟随 App 里选的歌词颜色；没有歌词就显示「歌名 · 作者」
         String cur = (CUR_ROW < lines.length && lines[CUR_ROW] != null && !lines[CUR_ROW].trim().isEmpty())
                 ? lines[CUR_ROW] : "";
-        rv.setTextViewText(R.id.n_lyric, cur.isEmpty() ? "♪" : cur);
-        rv.setTextColor(R.id.n_lyric, color);
-        rv.setInt(R.id.n_lyric, "setBackgroundColor", (color & 0x00FFFFFF) | 0x2E000000);
+        if (cur.isEmpty()) {
+            String fallback = title;
+            if (!artist.isEmpty()) fallback = fallback.isEmpty() ? artist : (fallback + " · " + artist);
+            cur = fallback.isEmpty() ? "♪" : fallback;
+        }
+        rv.setTextViewText(R.id.n_lyric, cur);
+        rv.setTextColor(R.id.n_lyric, color);                                   // 只用颜色，不加底色
+        rv.setInt(R.id.n_lyric, "setBackgroundColor", android.graphics.Color.TRANSPARENT);
 
         // 进度条 + 两端时间（数据来自网页每 2 秒上报的 pos/dur）
         int pct = 0;
@@ -356,11 +361,11 @@ public class LyricService extends Service {
             pct = (int) Math.max(0, Math.min(1000, positionMs * 1000 / durationMs));
         }
         rv.setProgressBar(R.id.n_prog, 1000, pct, false);
-        rv.setTextViewText(R.id.n_cur, clock(positionMs));
-        rv.setTextViewText(R.id.n_dur, durationMs > 0 ? clock(durationMs) : "--:--");
-        rv.setOnClickPendingIntent(R.id.n_prog, openAppIntent());
-        rv.setOnClickPendingIntent(R.id.n_back10, mediaKeyIntent(NOTIFY_ID * 10 + 5, KEY_BACK10));
-        rv.setOnClickPendingIntent(R.id.n_fwd10, mediaKeyIntent(NOTIFY_ID * 10 + 6, KEY_FWD10));
+        rv.setTextViewText(R.id.n_cur, clock(positionMs));                       // 进度条左边 = 当前时间
+        rv.setTextViewText(R.id.n_dur, durationMs > 0 ? clock(durationMs) : "--:--");   // 右边 = 总时长
+        // 整张卡片不绑点击（避免误触就打开 App）；只有进度条和右下角「打开」进 App
+        rv.setOnClickPendingIntent(R.id.n_prog, openAppIntent(2));
+        rv.setOnClickPendingIntent(R.id.n_open, openAppIntent(3));
 
         // 歌手右侧：有异常提示就显示提示（橙红）→ 否则加载中就显示“加载 NN%” → 否则显示歌曲源
         String badge = !notice.isEmpty() ? notice
@@ -383,8 +388,7 @@ public class LyricService extends Service {
         rv.setInt(R.id.n_mode, "setBackgroundResource",
                 "shuffle".equals(mode) ? R.drawable.nmode_bg_on : R.drawable.nmode_bg);
 
-        PendingIntent pi = openAppIntent();
-        rv.setOnClickPendingIntent(R.id.n_root, pi);
+        rv.setOnClickPendingIntent(R.id.n_root, null);      // 单击卡片不打开 App（防误触）
 
         // 上一首 / 播放暂停 / 下一首 / 模式切换：跟耳机线控走同一条路
         rv.setOnClickPendingIntent(R.id.n_prev, mediaKeyIntent(NOTIFY_ID * 10 + 1,
@@ -406,13 +410,13 @@ public class LyricService extends Service {
                 .build();
     }
 
-    /** 点卡片（或进度条）→ 打开 App，去里面拖进度 */
-    private PendingIntent openAppIntent() {
+    /** 点进度条 / 「打开」→ 进 App（在里面可以拖动进度、管理歌单） */
+    private PendingIntent openAppIntent(int reqCode) {
         Intent open = new Intent(this, MainActivity.class);
         open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
         int flags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
-        return PendingIntent.getActivity(this, 1, open, flags);
+        return PendingIntent.getActivity(this, reqCode, open, flags);
     }
 
     /** 毫秒 → m:ss */

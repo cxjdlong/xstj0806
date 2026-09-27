@@ -1116,8 +1116,13 @@ function playNext(step, auto) {
   if (MODE === 'loop') {                      // 列表循环：到头绕回另一端
     play(QUEUE[step > 0 ? 0 : QUEUE.length - 1]); return;
   }
-  audio.pause();                              // 顺序播放：最后一首放完就停
-  if (auto) { $('playToggle').textContent = '▶'; $('nowSub').textContent = '顺序播放已到最后一首'; }
+  if (auto) {                                 // 顺序播放：最后一首放完就停 + 释放
+    releasePlayer(true);
+    $('nowSub').textContent = '顺序播放已到最后一首';
+    toast('顺序播放结束', 2500);
+  } else {
+    audio.pause();
+  }
 }
 function replayCurrent() {
   try { audio.currentTime = 0; } catch (e) {}
@@ -1531,8 +1536,9 @@ async function play(t, replaceToken) {
   LOAD_PCT = 0;                      // 新歌开始加载
   audio.src = '/api/stream?t=' + q(t.token);
   audio.play().catch(e => playNotice('播放失败：' + e.message, 5000));
-  // 歌词：面板开着就刷新；开关是“开”的则自动弹出
-  if (!$('lrcSheet').hidden) loadLyric(t);
+  // 歌词：总是自动加载（锁屏卡片也要显示歌词）；面板开关是“开”的再弹出来
+  loadLyric(t);
+  if (!$('lrcSheet').hidden) { /* 面板已开，loadLyric 会刷新它 */ }
   else if (localStorage.getItem(LRC_ON_KEY) === '1') lrcShow(true);
   updateMediaSession(t, true);
   // App 内：起前台服务保活 + 上锁屏歌词
@@ -1555,12 +1561,26 @@ $('playToggle').onclick = () => {
 /* 上一首 / 下一首（界面按钮与耳机线控共用同一套逻辑） */
 $('prevBtn').onclick = () => mediaCmd('prev');
 $('nextBtn').onclick = () => mediaCmd('next');
-$('closePlayer').onclick = () => {
-  audio.pause(); audio.removeAttribute('src');
-  $('nowTitle').textContent = '未在播放'; $('nowSub').textContent = '点歌名即可播放';
-  CURRENT = null; LRC = { lines: [], idx: -1, token: '' };
+/* 释放播放器：停音频 + 卸载 src（audio.load() 才真正放掉解码器/缓冲）+ 清歌词，别长时间占内存 */
+function releasePlayer(keepInfo) {
+  try { audio.pause(); } catch (e) {}
+  try { audio.removeAttribute('src'); audio.load(); } catch (e) {}
+  LRC = { lines: [], idx: -1, token: '' };
+  LOAD_PCT = -1; PLAY_NOTICE = '';
+  clearTimeout(IDLE_TIMER); IDLE_TIMER = null;
+  const body = $('lrcBody');
+  if (body) body.innerHTML = '<div class="hint">播放歌曲后这里显示歌词</div>';
+  if (!keepInfo) {
+    CURRENT = null;
+    $('nowTitle').textContent = '未在播放';
+    $('nowSub').textContent = '点歌名即可播放';
+    $('playToggle').textContent = '▶';
+    $('cur').textContent = '0:00'; $('dur').textContent = '0:00'; $('prog').value = 0;
+  }
   if (window.Android && Android.playerStop) { try { Android.playerStop(); } catch (e) {} }
-};
+}
+
+$('closePlayer').onclick = () => releasePlayer(false);
 audio.onplay = () => $('playToggle').textContent = '❚❚';
 audio.onpause = () => $('playToggle').textContent = '▶';
 let SEEKING = false;   // 拖动进度条时不要被 timeupdate 拉回
@@ -1574,6 +1594,7 @@ $('prog').addEventListener('change', () => {
   pushPosition(); pushNativeMeta(CURRENT, true);
 });
 let POS_AT = 0;    // 进度上报节流（锁屏/车机进度条）
+let IDLE_TIMER = null;   // 暂停久了自动释放的定时器
 audio.ontimeupdate = () => {
   const d = audio.duration || 0;
   if (!SEEKING) $('prog').value = d ? Math.round((audio.currentTime / d) * 1000) : 0;
@@ -1597,7 +1618,13 @@ audio.addEventListener('waiting', () => {
 });
 audio.addEventListener('playing', () => {
   if (PLAY_NOTICE === '缓冲中…') PLAY_NOTICE = '';
+  clearTimeout(IDLE_TIMER); IDLE_TIMER = null;
   pushNativeInfo(srcLabel(CURRENT && CURRENT.source));
+});
+/* 暂停超过 10 分钟没动 → 自动释放（省内存/电量），下次点歌重新加载 */
+audio.addEventListener('pause', () => {
+  clearTimeout(IDLE_TIMER);
+  IDLE_TIMER = setTimeout(() => { if (audio.paused && CURRENT) releasePlayer(true); }, 600000);
 });
 audio.addEventListener('stalled', () => {
   PLAY_NOTICE = '加载慢…';

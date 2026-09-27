@@ -34,9 +34,8 @@
   /* 歌词行：文字色 + 淡底色 = App 里选的歌词颜色 */
   .lyric{margin-top:10px;text-align:center;font-size:14px;font-weight:700;padding:5px 8px;border-radius:8px}
   .prow{display:flex;align-items:center;margin-top:10px}
-  .seekbtn{font-size:11px;color:#e6e6e6;background:rgba(255,255,255,.2);border-radius:9px;
-           padding:4px 8px;flex:0 0 auto}
-  .bar{flex:1;height:4px;border-radius:3px;background:rgba(255,255,255,.4);margin:0 6px;position:relative}
+  .tm{font-size:10px;color:rgba(255,255,255,.6);flex:0 0 auto}
+  .bar{flex:1;height:4px;border-radius:3px;background:rgba(255,255,255,.4);margin:0 8px;position:relative}
   .bar > i{position:absolute;left:0;top:0;bottom:0;width:32%;border-radius:3px}
   .times{display:flex;justify-content:space-between;font-size:10px;color:#99ffffff;margin-top:2px}
   .tline{display:flex;justify-content:space-between;font-size:10px;color:rgba(255,255,255,.6);margin-top:2px}
@@ -72,15 +71,15 @@
       <div class="lyric" id="lyric">纪念我死去的爱情</div>
 
       <div class="prow">
-        <span class="seekbtn">-10s</span>
+        <span class="tm" id="cur">1:04</span>
         <div class="bar"><i id="fill"></i></div>
-        <span class="seekbtn">+10s</span>
+        <span class="tm" id="dur">3:15</span>
       </div>
-      <div class="tline"><span id="cur">1:04</span><span id="dur">3:15</span></div>
 
       <div class="ctl">
-        <div class="grp"><span>⏮</span><span>⏯</span><span>⏭</span></div>
+        <div class="grp"><span>⏮</span><span>❚❚</span><span>⏭</span></div>
         <div class="mode">随</div>
+        <span class="mode" style="margin-left:8px">打开</span>
       </div>
     </div>
   </div>
@@ -90,14 +89,16 @@
     <button id="btnOk" style="flex:1;min-width:110px;border:1px solid #e3e7ef;background:#fff;color:#39414f;border-radius:10px;padding:10px;font-size:13px">正常：显示歌曲源</button>
     <button id="btnLoad" style="flex:1;min-width:110px;border:1px solid #e3e7ef;background:#fff;color:#39414f;border-radius:10px;padding:10px;font-size:13px">加载中：显示加载 %</button>
     <button id="btnBad" style="flex:1;min-width:110px;border:0;background:#e2503c;color:#fff;border-radius:10px;padding:10px;font-size:13px">异常：换源失败</button>
+    <button id="btnNoLrc" style="flex:1;min-width:110px;border:1px solid #e3e7ef;background:#fff;color:#39414f;border-radius:10px;padding:10px;font-size:13px">没有歌词：显示歌名·作者</button>
   </div>
 
   <p class="note">
     <b>这版加了两样：</b><br>
     ① 歌名下面一排歌词，颜色/淡底色跟着主界面选的歌词颜色；<br>
-    ② 一排进度条（实时走），两头 <b>-10s / +10s</b> 可以在锁屏上快进快退；<br>
-    ③ 点进度条/卡片 → 打开 App，在 App 里可以拖动进度；<br>
-    ④ <b>歌手那一排的右侧</b>：平时显示<b>歌曲源</b>（网易云/QQ音乐/酷狗…）；音频加载中显示「加载 NN%」；换源失败、取不到流这类提示显示在那里（橙红底）。<br>
+    ② 进度条两端 = <b>当前时间 / 总时长</b>（一前一后），实时走；<br>
+    ③ <b>单击卡片不再打开 App</b>（防误触），点进度条或右下角「打开」才进 App，在 App 里自由拖动进度；<br>
+    ④ <b>歌手那一排的右侧</b>：平时显示<b>歌曲源</b>（网易云/QQ音乐/酷狗…）；音频加载中显示「加载 NN%」；换源失败、取不到流这类提示显示在那里（橙红底）；<br>
+    ⑤ 中间那行是<b>当前歌词</b>；<b>没有歌词时显示「歌名 · 作者」</b>。<br>
     <br>
     说明：安卓通知里的控件<b>收不到手指拖动</b>（系统 RemoteViews 只支持点击），所以通知上的进度条是“实时显示 + 点击进 App 拖”，要真正拖动进度就用 App 内的进度条。
   </p>
@@ -115,7 +116,7 @@
   });
   function paint(c) {
     lyric.style.color = c;
-    lyric.style.background = c + '2e';      // 同色 18% 透明做底
+    lyric.style.background = 'transparent';  // 只要字色，不加底色（底就是卡片本身）
     fill.style.background = c;              // 进度条同色，看着统一
     [].forEach.call(sw.children, function (el) {
       el.classList.toggle('on', el.style.background.replace(/\s/g, '') === 'rgb(' + hex2rgb(c) + ')');
@@ -127,12 +128,18 @@
   paint(colors[0]);
   var badge = document.getElementById('badge');
   document.getElementById('btnOk').onclick = function () {
+    clearInterval(loadTimer);
     badge.textContent = '网易云'; badge.className = 'badge';
+    lyric.textContent = '纪念我死去的爱情';
   };
   var loadTimer = null;
   document.getElementById('btnBad').onclick = function () {
     clearInterval(loadTimer);
     badge.textContent = '换源失败，请换一首'; badge.className = 'badge alert';
+  };
+  document.getElementById('btnNoLrc').onclick = function () {
+    clearInterval(loadTimer);
+    lyric.textContent = '夜曲 · 周杰伦';
   };
   document.getElementById('btnLoad').onclick = function () {
     clearInterval(loadTimer);

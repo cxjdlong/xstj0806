@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 锁屏/通知栏：常规播放器卡片（封面 + 歌名歌手 + 一行歌词 + 进度条 + 控制键）
-     歌词行的文字颜色/底色跟随 App 里选定的歌词颜色（代码里 setTextColor / setBackgroundColor）。
-     进度条只能显示（RemoteViews 收不到拖动），两头给了 -10s / +10s，点进度条本身会打开 App。 -->
+<!-- 锁屏/通知栏播放器卡片
+     歌名 → 歌手行(左歌手 ｜ 右侧标签:歌曲源/加载进度/异常提示) → 歌词(无歌词时显示歌名·作者)
+     → 当前时间 ｜ 进度条 ｜ 总时长 → 控制行(⏮ ⏯ ⏭ + 模式 + 打开)
+     注：整张卡片不绑点击（防误触），只有进度条和右下角「打开」会进 App。 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/n_root"
     android:layout_width="match_parent"
@@ -83,11 +84,10 @@
                     android:textSize="10sp"
                     android:text="源" />
             </LinearLayout>
-
         </LinearLayout>
     </LinearLayout>
 
-    <!-- 一排歌词（当前句）：文字色 + 淡底色都跟随 App 里的歌词颜色 -->
+    <!-- 一行歌词（当前句）：没有歌词时代码会填「歌名 · 作者」 -->
     <TextView
         android:id="@+id/n_lyric"
         android:layout_width="match_parent"
@@ -105,7 +105,7 @@
         android:textColor="#4CD964"
         android:text="♪" />
 
-    <!-- 进度：-10s ｜ 进度条 ｜ +10s -->
+    <!-- 进度：当前时间 ｜ 进度条 ｜ 总时长（点进度条进 App 拖动） -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -114,9 +114,9 @@
         android:gravity="center_vertical">
 
         <TextView
-            android:id="@+id/n_back10"
-            style="@style/NSeek"
-            android:text="-10s" />
+            android:id="@+id/n_cur"
+            style="@style/NTime"
+            android:text="0:00" />
 
         <ProgressBar
             android:id="@+id/n_prog"
@@ -124,41 +124,23 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginLeft="6dp"
-            android:layout_marginRight="6dp"
+            android:layout_marginLeft="8dp"
+            android:layout_marginRight="8dp"
             android:max="1000"
             android:progress="0"
             android:progressTint="#2F6FFF"
             android:progressBackgroundTint="#66FFFFFF" />
 
         <TextView
-            android:id="@+id/n_fwd10"
-            style="@style/NSeek"
-            android:text="+10s" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal">
-
-        <TextView
-            android:id="@+id/n_cur"
-            style="@style/NTime"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:text="0:00" />
-
-        <TextView
             android:id="@+id/n_dur"
             style="@style/NTime"
-            android:text="0:00" />
+            android:text="--:--" />
     </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="8dp"
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
@@ -177,7 +159,7 @@
             <TextView
                 android:id="@+id/n_toggle"
                 style="@style/NBtn"
-                android:text="⏯" />
+                android:text="❚❚" />
 
             <TextView
                 android:id="@+id/n_next"
@@ -189,5 +171,12 @@
             android:id="@+id/n_mode"
             style="@style/NMode"
             android:text="循" />
+
+        <TextView
+            android:id="@+id/n_open"
+            style="@style/NMode"
+            android:layout_marginLeft="8dp"
+            android:layout_marginStart="8dp"
+            android:text="打开" />
     </LinearLayout>
 </LinearLayout>
