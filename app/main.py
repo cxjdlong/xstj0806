@@ -1721,18 +1721,32 @@ async def preview_page():
     )
 
 
-@app.get("/music.apk")
-async def download_apk():
-    """最新安卓安装包：宿主上的 sync-apk.sh 从 GitHub Release 拉下来放进挂载目录。"""
+def _apk_response(download_name: str) -> FileResponse:
     f = APK_DIR / "music.apk"
     if not f.exists():
         raise HTTPException(status_code=404, detail="还没有打包好的 APK（先让 CI 跑一次）")
     return FileResponse(
         f,
         media_type="application/vnd.android.package-archive",
-        filename="music.apk",
-        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        filename=download_name,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
     )
+
+
+@app.get("/music.apk")
+async def download_apk():
+    """最新安卓安装包：宿主上的 sync-apk.sh 从 GitHub Release 拉下来放进挂载目录。"""
+    return _apk_response("music.apk")
+
+
+@app.get("/music1.apk")
+async def download_apk_v2():
+    """同一个包的另一个下载名（换名绕开浏览器/代理的旧缓存）。"""
+    return _apk_response("music1.apk")
 
 
 @app.get("/favicon.ico")
