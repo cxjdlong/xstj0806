@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 锁屏/通知栏歌词卡片：背板 20% 不透明，5 行（当前句在第 3 行居中、绿色高亮），底部一排上一首/播放/下一首 -->
+<!-- 锁屏/通知栏：常规播放器卡片
+     第1行：左封面图 + 右侧 歌名 / 歌手（+ 当前歌词在下面两行滚动）
+     第2行：歌词（上/中/下三行，中间那行是当前句，绿色高亮）
+     第3行：上一首 / 播放暂停 / 下一首 / 播放模式（顺·循·单·随）
+     背板 20% 不透明，锁屏下同样可见 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/n_root"
     android:layout_width="match_parent"
@@ -8,8 +12,8 @@
     android:background="#33000000"
     android:paddingLeft="16dp"
     android:paddingRight="16dp"
-    android:paddingTop="12dp"
-    android:paddingBottom="14dp">
+    android:paddingTop="14dp"
+    android:paddingBottom="12dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -17,55 +21,83 @@
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
-        <TextView
-            android:id="@+id/n_title"
+        <ImageView
+            android:id="@+id/n_cover"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:scaleType="centerCrop"
+            android:background="#33FFFFFF"
+            android:contentDescription="@string/app_name" />
+
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:maxLines="1"
-            android:ellipsize="end"
-            android:textColor="#FFFFFF"
-            android:textSize="13sp"
-            android:textStyle="bold"
-            android:text="@string/app_name" />
+            android:layout_marginLeft="12dp"
+            android:layout_marginStart="12dp"
+            android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/n_artist"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:maxLines="1"
-            android:ellipsize="end"
-            android:textColor="#99FFFFFF"
-            android:textSize="11sp"
-            android:text="" />
+            <TextView
+                android:id="@+id/n_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:text="@string/app_name" />
+
+            <TextView
+                android:id="@+id/n_artist"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:textColor="#B3FFFFFF"
+                android:textSize="12sp"
+                android:text="" />
+        </LinearLayout>
     </LinearLayout>
 
-    <TextView android:id="@+id/n_l0" style="@style/NLrcFar"  android:layout_marginTop="12dp" />
-    <TextView android:id="@+id/n_l1" style="@style/NLrcNear" android:layout_marginTop="5dp" />
-    <TextView android:id="@+id/n_l2" style="@style/NLrcCur"  android:layout_marginTop="8dp" />
-    <TextView android:id="@+id/n_l3" style="@style/NLrcNear" android:layout_marginTop="8dp" />
-    <TextView android:id="@+id/n_l4" style="@style/NLrcFar"  android:layout_marginTop="5dp" />
+    <TextView android:id="@+id/n_l0" style="@style/NLrcFar"  android:layout_marginTop="10dp" />
+    <TextView android:id="@+id/n_l1" style="@style/NLrcCur"  android:layout_marginTop="7dp" />
+    <TextView android:id="@+id/n_l2" style="@style/NLrcNear" android:layout_marginTop="7dp" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
         android:orientation="horizontal"
-        android:gravity="center">
+        android:gravity="center_vertical">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <TextView
+                android:id="@+id/n_prev"
+                style="@style/NBtn"
+                android:text="⏮" />
+
+            <TextView
+                android:id="@+id/n_toggle"
+                style="@style/NBtn"
+                android:text="⏯" />
+
+            <TextView
+                android:id="@+id/n_next"
+                style="@style/NBtn"
+                android:text="⏭" />
+        </LinearLayout>
 
         <TextView
-            android:id="@+id/n_prev"
-            style="@style/NBtn"
-            android:text="⏮" />
-
-        <TextView
-            android:id="@+id/n_toggle"
-            style="@style/NBtn"
-            android:text="⏯" />
-
-        <TextView
-            android:id="@+id/n_next"
-            style="@style/NBtn"
-            android:text="⏭" />
+            android:id="@+id/n_mode"
+            style="@style/NMode"
+            android:text="循" />
     </LinearLayout>
 </LinearLayout>

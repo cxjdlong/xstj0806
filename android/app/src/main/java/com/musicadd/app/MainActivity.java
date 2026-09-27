@@ -239,6 +239,16 @@ public class MainActivity extends Activity {
             startServiceSafe(i);
         }
 
+        /** 播放模式（order/loop/one/shuffle）→ 锁屏卡片上的模式键 */
+        @JavascriptInterface
+        public void mediaMode(String mode) {
+            if (!LyricService.isAlive()) return;
+            Intent i = new Intent(MainActivity.this, LyricService.class);
+            i.setAction(LyricService.ACTION_MODE);
+            i.putExtra("mode", mode == null ? "" : mode);
+            startServiceSafe(i);
+        }
+
         /** 服务器地址 + 飞牛音乐账号一起保存（两个都必填，前端已校验，这里再兜一层） */
         @JavascriptInterface
         public void save(String url, String user) {

@@ -55,4 +55,19 @@
         <item name="android:textSize">18sp</item>
         <item name="android:gravity">center</item>
     </style>
+
+    <!-- 播放模式按钮（顺 / 循 / 单 / 随） -->
+    <style name="NMode">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minWidth">36dp</item>
+        <item name="android:paddingLeft">9dp</item>
+        <item name="android:paddingRight">9dp</item>
+        <item name="android:paddingTop">5dp</item>
+        <item name="android:paddingBottom">5dp</item>
+        <item name="android:background">@drawable/nmode_bg</item>
+        <item name="android:textColor">#E6FFFFFF</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:gravity">center</item>
+    </style>
 </resources>

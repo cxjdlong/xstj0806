@@ -908,13 +908,22 @@ function paintMode() {
   $('modeBtn').classList.toggle('shuffle', MODE === 'shuffle');
   $('modeBtn').classList.toggle('one', MODE === 'one');
 }
-$('modeBtn').onclick = () => {
+function cycleMode(announce) {
   const idx = MODES.findIndex(m => m.k === MODE);
   MODE = MODES[(idx + 1) % MODES.length].k;
   try { localStorage.setItem('ma_mode', MODE); } catch (e) {}
-  paintMode(); toast('播放模式：' + modeInfo().t);
-};
+  paintMode();
+  pushNativeMode();            // 锁屏卡片上的「顺/循/单/随」跟着变
+  if (announce !== false) toast('播放模式：' + modeInfo().t);
+}
+$('modeBtn').onclick = () => cycleMode();
 paintMode();
+
+/** 把当前播放模式告诉 App 壳（锁屏卡片上的模式键显示） */
+function pushNativeMode() {
+  if (!window.Android || !Android.mediaMode) return;
+  try { Android.mediaMode(MODE); } catch (e) {}
+}
 
 /* auto=true 表示「一首播完自动往下走」：单曲循环只在自动时重播本首 */
 function playNext(step, auto) {
@@ -1132,7 +1141,7 @@ function pushLyricToNative() {
   if (!window.Android || !Android.lyric) return;
   try {
     const idx = LRC.idx;
-    const UP = 2, ROWS = 5;       // 上面 2 行 + 当前句 + 下面 2 行
+    const UP = 1, ROWS = 3;       // 上面 1 行 + 当前句 + 下面 1 行（锁屏卡片按播放器样式排版）
     const rows = [];
     for (let k = -UP; k < ROWS - UP; k++) {
       const j = idx + k;
@@ -1221,6 +1230,7 @@ function mediaCmd(action) {
     return;
   }
   if (action === 'next') { if (!QUEUE.length) { toast('播放列表是空的'); return; } playNext(1); return; }
+  if (action === 'mode') { cycleMode(); return; }        // 锁屏卡片上的模式键
   if (action === 'prev') {
     if (!QUEUE.length) { toast('播放列表是空的'); return; }
     const i = CURRENT ? QUEUE.findIndex(x => x.token === CURRENT.token) : -1;
@@ -1248,6 +1258,7 @@ window.maNative = {
 /* 把播放状态交给 App 壳的原生 MediaSession（耳机媒体键 / 车机显示歌名歌手封面） */
 function pushNativeMeta(t, playing) {
   if (!t || !window.Android || !Android.mediaMeta) return;
+  pushNativeMode();
   try {
     Android.mediaMeta(t.title || '', t.artist || '', t.album || '', t.cover || '',
       Math.round((audio.duration || t.duration || 0) * 1000),

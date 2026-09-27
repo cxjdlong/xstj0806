@@ -40,14 +40,20 @@ public class LyricService extends Service {
     public static final String ACTION_STOP = "com.musicadd.app.PLAYER_STOP";
     public static final String ACTION_UPDATE = "com.musicadd.app.LYRIC_UPDATE";
     public static final String ACTION_META = "com.musicadd.app.MEDIA_META";
-    /** 通知里的上一首/播放/下一首按钮（等价于按耳机键） */
+    /** 通知里的上一首/播放/下一首/模式按钮（等价于按耳机键） */
     public static final String ACTION_KEY = "com.musicadd.app.MEDIA_KEY";
+    /** 播放模式变化（顺/循/单/随） */
+    public static final String ACTION_MODE = "com.musicadd.app.MEDIA_MODE";
+
+    /** 通知按钮里的“模式”虚拟键码 */
+    private static final int KEY_MODE = 0;
 
     private static final String CHANNEL_ID = "musicadd_play";
     private static final int NOTIFY_ID = 1001;
-    private static final int ROWS = 5;
-    /** 当前句固定显示在第几行（0 起，第 2 行 = 正中间） */
-    private static final int CUR_ROW = 2;
+    /** 锁屏卡片歌词行数：上 1 行 + 当前句 + 下 1 行 */
+    private static final int ROWS = 3;
+    /** 当前句固定显示在第几行（0 起，第 1 行 = 正中间） */
+    private static final int CUR_ROW = 1;
     /** 网页把多行歌词用换行符拼成一串传过来（歌词本身不含换行，安全） */
     private static final String SEP = "\n";
 
@@ -67,7 +73,10 @@ public class LyricService extends Service {
     private String coverUrl = "";
     private String loadedCoverUrl = "";
     private Bitmap coverBmp;
-    private String[] lines = new String[]{"", "", "", "", ""};
+    private Bitmap fallbackCover;      // 没有封面时用 App 图标顶位
+    /** 播放模式：order/loop/one/shuffle（由网页同步过来，通知上的模式键显示用） */
+    private String mode = "loop";
+    private String[] lines = new String[]{"", "", ""};
     private int color = Color.WHITE;
 
     private MediaSession session;
@@ -206,8 +215,9 @@ public class LyricService extends Service {
                     @Override
                     public void run() {
                         if (got != null) {
-                            coverBmp = got;
+                            coverBmp = scaleCover(got);
                             pushSession();
+                            refreshNotification();     // 锁屏卡片左上角的封面图
                         }
                     }
                 });
@@ -240,7 +250,9 @@ public class LyricService extends Service {
                 if (!coverUrl.isEmpty()) loadCover(coverUrl);
             } else if (ACTION_KEY.equals(action)) {
                 int kc = intent.getIntExtra("keyCode", 0);
-                if (kc == android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS) {
+                if (kc == KEY_MODE) {
+                    MainActivity.sendMediaCmd("mode");     // 网页切完模式会把新模式回传过来
+                } else if (kc == android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS) {
                     MainActivity.sendMediaCmd("prev");
                 } else if (kc == android.view.KeyEvent.KEYCODE_MEDIA_NEXT) {
                     MainActivity.sendMediaCmd("next");
@@ -253,6 +265,10 @@ public class LyricService extends Service {
                 } catch (Exception ignored) {
                 }
                 pushSession();
+                return START_STICKY;
+            } else if (ACTION_MODE.equals(action)) {
+                if (intent.hasExtra("mode")) mode = nz(intent.getStringExtra("mode"));
+                refreshNotification();
                 return START_STICKY;
             } else if (intent.hasExtra("lines")) {
                 String raw = nz(intent.getStringExtra("lines"));
@@ -290,7 +306,11 @@ public class LyricService extends Service {
         rv.setTextViewText(R.id.n_title, title.isEmpty() ? getString(R.string.app_name) : title);
         rv.setTextViewText(R.id.n_artist, artist);
 
-        int[] ids = new int[]{R.id.n_l0, R.id.n_l1, R.id.n_l2, R.id.n_l3, R.id.n_l4};
+        // 左上角封面图（拿不到封面就用 App 图标顶位）
+        Bitmap cover = (coverBmp != null) ? coverBmp : fallbackCover();
+        if (cover != null) rv.setImageViewBitmap(R.id.n_cover, cover);
+
+        int[] ids = new int[]{R.id.n_l0, R.id.n_l1, R.id.n_l2};
         for (int i = 0; i < ROWS; i++) {
             rv.setTextViewText(ids[i], lines[i]);
         }
@@ -304,6 +324,11 @@ public class LyricService extends Service {
         }
         rv.setTextViewText(ids[CUR_ROW], empty ? "♪" : lines[CUR_ROW]);
 
+        // 播放模式键：顺 / 循 / 单 / 随（随机时按钮变蓝）
+        rv.setTextViewText(R.id.n_mode, modeLabel());
+        rv.setInt(R.id.n_mode, "setBackgroundResource",
+                "shuffle".equals(mode) ? R.drawable.nmode_bg_on : R.drawable.nmode_bg);
+
         Intent open = new Intent(this, MainActivity.class);
         open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
         int flags = PendingIntent.FLAG_UPDATE_CURRENT;
@@ -311,13 +336,14 @@ public class LyricService extends Service {
         PendingIntent pi = PendingIntent.getActivity(this, 0, open, flags);
         rv.setOnClickPendingIntent(R.id.n_root, pi);
 
-        // 上一首 / 播放暂停 / 下一首：走 MediaSession 的媒体键，和耳机线控同一条路
+        // 上一首 / 播放暂停 / 下一首 / 模式切换：跟耳机线控走同一条路
         rv.setOnClickPendingIntent(R.id.n_prev, mediaKeyIntent(NOTIFY_ID * 10 + 1,
                 android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS));
         rv.setOnClickPendingIntent(R.id.n_toggle, mediaKeyIntent(NOTIFY_ID * 10 + 2,
                 android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE));
         rv.setOnClickPendingIntent(R.id.n_next, mediaKeyIntent(NOTIFY_ID * 10 + 3,
                 android.view.KeyEvent.KEYCODE_MEDIA_NEXT));
+        rv.setOnClickPendingIntent(R.id.n_mode, mediaKeyIntent(NOTIFY_ID * 10 + 4, KEY_MODE));
 
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
@@ -328,6 +354,43 @@ public class LyricService extends Service {
                 .setShowWhen(false)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build();
+    }
+
+    /** 重画通知（歌词换行、封面到位、模式切换都走它） */
+    private void refreshNotification() {
+        try {
+            startForeground(NOTIFY_ID, build());
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** 模式 → 锁屏卡片上的按钮文字 */
+    private String modeLabel() {
+        if ("order".equals(mode)) return "顺";
+        if ("one".equals(mode)) return "单";
+        if ("shuffle".equals(mode)) return "随";
+        return "循";
+    }
+
+    /** 封面缩到通知够用的尺寸（RemoteViews 传大图会超 binder 限制） */
+    private static Bitmap scaleCover(Bitmap src) {
+        try {
+            int size = 200;
+            if (src.getWidth() <= size && src.getHeight() <= size) return src;
+            return Bitmap.createScaledBitmap(src, size, size, true);
+        } catch (Exception e) {
+            return src;
+        }
+    }
+
+    private Bitmap fallbackCover() {
+        if (fallbackCover == null) {
+            try {
+                fallbackCover = BitmapFactory.decodeResource(getResources(), R.mipmap.ic_launcher);
+            } catch (Exception ignored) {
+            }
+        }
+        return fallbackCover;
     }
 
     /** 通知里的按钮 → 直接调 MediaSession 回调（等价于按耳机键） */
