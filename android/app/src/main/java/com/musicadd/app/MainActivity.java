@@ -241,12 +241,13 @@ public class MainActivity extends Activity {
 
         /** 歌曲源 + 播放状态提示 → 锁屏卡片上歌名右侧那个小标签 */
         @JavascriptInterface
-        public void mediaInfo(String source, String notice) {
+        public void mediaInfo(String source, String notice, double loadPct) {
             if (!LyricService.isAlive()) return;
             Intent i = new Intent(MainActivity.this, LyricService.class);
             i.setAction(LyricService.ACTION_INFO);
             i.putExtra("source", source == null ? "" : source);
             i.putExtra("notice", notice == null ? "" : notice);
+            i.putExtra("loadPct", (int) loadPct);
             startServiceSafe(i);
         }
 

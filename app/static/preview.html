@@ -24,8 +24,9 @@
   .cover{width:56px;height:56px;border-radius:8px;flex:0 0 auto;
          background:linear-gradient(135deg,#6d7ea0,#39445c) center/cover}
   .meta{flex:1;min-width:0;margin-left:12px}
-  .trow{display:flex;align-items:center;gap:8px}
-  .t{flex:1;min-width:0;font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .t{font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .arow{display:flex;align-items:center;gap:8px;margin-top:2px}
+  .arow .a{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .badge{flex:0 0 auto;font-size:10px;color:#d9e2f5;background:rgba(255,255,255,.2);
          border-radius:8px;padding:2px 7px;white-space:nowrap}
   .badge.alert{background:#e2503c;color:#fff}
@@ -63,8 +64,8 @@
       <div class="top">
         <div class="cover" style="background-image:url('https://p1.music.126.net/6y-UleORITEDbvrOLV0Q8A==/5639395138885805.jpg')"></div>
         <div class="meta">
-          <div class="trow"><div class="t">夜曲</div><span class="badge" id="badge">网易云</span></div>
-          <div class="a">周杰伦</div>
+          <div class="t">夜曲</div>
+          <div class="arow"><div class="a">周杰伦</div><span class="badge" id="badge">网易云</span></div>
         </div>
       </div>
 
@@ -85,9 +86,10 @@
   </div>
 
   <div class="sw" id="sw"></div>
-  <div style="display:flex;gap:8px;margin-top:12px">
-    <button id="btnOk" style="flex:1;border:1px solid #e3e7ef;background:#fff;color:#39414f;border-radius:10px;padding:10px;font-size:13px">正常（显示歌曲源）</button>
-    <button id="btnBad" style="flex:1;border:0;background:#e2503c;color:#fff;border-radius:10px;padding:10px;font-size:13px">换源失败（看提示）</button>
+  <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+    <button id="btnOk" style="flex:1;min-width:110px;border:1px solid #e3e7ef;background:#fff;color:#39414f;border-radius:10px;padding:10px;font-size:13px">正常：显示歌曲源</button>
+    <button id="btnLoad" style="flex:1;min-width:110px;border:1px solid #e3e7ef;background:#fff;color:#39414f;border-radius:10px;padding:10px;font-size:13px">加载中：显示加载 %</button>
+    <button id="btnBad" style="flex:1;min-width:110px;border:0;background:#e2503c;color:#fff;border-radius:10px;padding:10px;font-size:13px">异常：换源失败</button>
   </div>
 
   <p class="note">
@@ -95,7 +97,7 @@
     ① 歌名下面一排歌词，颜色/淡底色跟着主界面选的歌词颜色；<br>
     ② 一排进度条（实时走），两头 <b>-10s / +10s</b> 可以在锁屏上快进快退；<br>
     ③ 点进度条/卡片 → 打开 App，在 App 里可以拖动进度；<br>
-    ④ 歌名右侧显示<b>歌曲源</b>（网易云/QQ音乐/酷狗…），换源失败、取不到流这类提示也显示在那里（橙红底）。<br>
+    ④ <b>歌手那一排的右侧</b>：平时显示<b>歌曲源</b>（网易云/QQ音乐/酷狗…）；音频加载中显示「加载 NN%」；换源失败、取不到流这类提示显示在那里（橙红底）。<br>
     <br>
     说明：安卓通知里的控件<b>收不到手指拖动</b>（系统 RemoteViews 只支持点击），所以通知上的进度条是“实时显示 + 点击进 App 拖”，要真正拖动进度就用 App 内的进度条。
   </p>
@@ -127,8 +129,20 @@
   document.getElementById('btnOk').onclick = function () {
     badge.textContent = '网易云'; badge.className = 'badge';
   };
+  var loadTimer = null;
   document.getElementById('btnBad').onclick = function () {
+    clearInterval(loadTimer);
     badge.textContent = '换源失败，请换一首'; badge.className = 'badge alert';
+  };
+  document.getElementById('btnLoad').onclick = function () {
+    clearInterval(loadTimer);
+    var pct = 12;
+    badge.className = 'badge';
+    badge.textContent = '加载 ' + pct + '%';
+    loadTimer = setInterval(function () {
+      pct = Math.min(99, pct + 7);
+      badge.textContent = '加载 ' + pct + '%';
+    }, 700);
   };
   // 让进度条动起来
   var pct = 32;

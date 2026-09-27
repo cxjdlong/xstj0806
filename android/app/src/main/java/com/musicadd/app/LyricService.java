@@ -82,8 +82,10 @@ public class LyricService extends Service {
     private String mode = "loop";
     /** 歌名右侧标签：歌曲源（如“网易云”） */
     private String source = "";
-    /** 歌名右侧标签：播放异常提示（换源失败/取不到流…），为空时显示 source */
+    /** 歌手右侧标签：播放异常提示（换源失败/取不到流…），为空时显示 source */
     private String notice = "";
+    /** 歌手右侧标签：音频加载进度（0~100；-1 = 已加载完/未知） */
+    private int loadPct = -1;
     private String[] lines = new String[]{"", "", ""};
     private int color = Color.WHITE;
 
@@ -249,7 +251,7 @@ public class LyricService extends Service {
             }
             if (intent.hasExtra("title")) {
                 String nt = nz(intent.getStringExtra("title"));
-                if (!nt.equals(title)) notice = "";     // 换歌了 → 清掉上一首的报错提示
+                if (!nt.equals(title)) { notice = ""; loadPct = -1; }   // 换歌了 → 清掉上一首的提示/进度
                 title = nt;
             }
             if (intent.hasExtra("artist")) artist = nz(intent.getStringExtra("artist"));
@@ -298,6 +300,7 @@ public class LyricService extends Service {
             } else if (ACTION_INFO.equals(action)) {
                 if (intent.hasExtra("source")) source = nz(intent.getStringExtra("source"));
                 if (intent.hasExtra("notice")) notice = nz(intent.getStringExtra("notice"));
+                if (intent.hasExtra("loadPct")) loadPct = intent.getIntExtra("loadPct", -1);
                 refreshNotification();
                 return START_STICKY;
             } else if (intent.hasExtra("lines")) {
@@ -359,8 +362,9 @@ public class LyricService extends Service {
         rv.setOnClickPendingIntent(R.id.n_back10, mediaKeyIntent(NOTIFY_ID * 10 + 5, KEY_BACK10));
         rv.setOnClickPendingIntent(R.id.n_fwd10, mediaKeyIntent(NOTIFY_ID * 10 + 6, KEY_FWD10));
 
-        // 歌名右侧：有异常提示就显示提示（橙红），否则显示歌曲源
-        String badge = !notice.isEmpty() ? notice : source;
+        // 歌手右侧：有异常提示就显示提示（橙红）→ 否则加载中就显示“加载 NN%” → 否则显示歌曲源
+        String badge = !notice.isEmpty() ? notice
+                : (loadPct >= 0 && loadPct < 100 ? ("加载 " + loadPct + "%") : source);
         rv.setTextViewText(R.id.n_badge, badge.isEmpty() ? "" : badge);
         rv.setInt(R.id.n_badge, "setBackgroundResource",
                 notice.isEmpty() ? R.drawable.nmode_bg : R.drawable.nbadge_alert);

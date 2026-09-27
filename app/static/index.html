@@ -1441,10 +1441,12 @@ const srcLabel = (s) => SRC_NAME[s] || (s || '');
 
 /* 播放异常/换源提示：既弹 toast，也推到锁屏卡片（歌名右侧），到点自动恢复显示歌曲源 */
 let PLAY_NOTICE = '', NOTICE_TIMER = null;
-function pushNativeInfo(src, notice) {
+let LOAD_PCT = -1;                    // 音频加载进度（-1 = 已加载完/未知）
+function pushNativeInfo(src, notice, pct) {
   if (!window.Android || !Android.mediaInfo) return;
   const n = (notice === undefined) ? PLAY_NOTICE : notice;
-  try { Android.mediaInfo(src || '', n || ''); } catch (e) {}
+  const p = (pct === undefined) ? LOAD_PCT : pct;
+  try { Android.mediaInfo(src || '', n || '', p); } catch (e) {}
 }
 function playNotice(msg, ms) {
   const hold = ms || 3000;
@@ -1526,6 +1528,7 @@ async function play(t, replaceToken) {
     queueAdd(t, true);
   }
   CURRENT = t;
+  LOAD_PCT = 0;                      // 新歌开始加载
   audio.src = '/api/stream?t=' + q(t.token);
   audio.play().catch(e => playNotice('播放失败：' + e.message, 5000));
   // 歌词：面板开着就刷新；开关是“开”的则自动弹出
@@ -1579,6 +1582,27 @@ audio.ontimeupdate = () => {
   if (Date.now() - POS_AT > 2000) { POS_AT = Date.now(); pushPosition(); pushNativeMeta(CURRENT, true); }   // 锁屏进度条要跟得紧一点
 };
 audio.onended = () => { $('playToggle').textContent = '▶'; playNext(1, true); };
+/* 音频加载/缓冲：把进度和“缓冲中”提示同步到锁屏卡片（歌手右侧那个标签） */
+audio.addEventListener('progress', () => {
+  const d = audio.duration || 0;
+  if (!d || !audio.buffered || !audio.buffered.length) return;
+  const end = audio.buffered.end(audio.buffered.length - 1);
+  const pct = Math.min(100, Math.round((end / d) * 100));
+  LOAD_PCT = pct >= 100 ? -1 : pct;
+  pushNativeInfo(srcLabel(CURRENT && CURRENT.source));
+});
+audio.addEventListener('waiting', () => {
+  PLAY_NOTICE = '缓冲中…';
+  pushNativeInfo(srcLabel(CURRENT && CURRENT.source));
+});
+audio.addEventListener('playing', () => {
+  if (PLAY_NOTICE === '缓冲中…') PLAY_NOTICE = '';
+  pushNativeInfo(srcLabel(CURRENT && CURRENT.source));
+});
+audio.addEventListener('stalled', () => {
+  PLAY_NOTICE = '加载慢…';
+  pushNativeInfo(srcLabel(CURRENT && CURRENT.source));
+});
 audio.onerror = async () => {
   if (!audio.src || !CURRENT) return;
   if (CURRENT._switched) { playNotice('换源失败，请换一首', 6000); return; }
