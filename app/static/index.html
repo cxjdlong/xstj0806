@@ -141,7 +141,10 @@
   #listing{flex:1;min-width:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-bottom:132px}
   .lhead{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.97);backdrop-filter:blur(8px);
          display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid var(--line);min-width:0}
-  .back{flex:0 0 auto;border:0;background:#eef1f7;color:#3a4354;border-radius:8px;padding:6px 11px;font-size:13px}
+  /* 返回键：尺寸/圆角/字重与「▶ 播放歌单」按钮一致（同色系，层级仍清楚） */
+  .back{flex:0 0 auto;border:0;background:var(--pri-l);color:var(--pri);border-radius:8px;
+        padding:7px 13px;font-size:13px;font-weight:600;white-space:nowrap;line-height:normal}
+  .back:active{opacity:.8}
   .lhead .info{flex:1;min-width:0}
   .lhead .title{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   /* 歌单介绍：自动换行，最多 2 行，超出直接截断不显示 */
