@@ -239,6 +239,16 @@ public class MainActivity extends Activity {
             startServiceSafe(i);
         }
 
+        /** 版本号（网页在 ≡ 菜单里显示，方便确认装的是哪一版） */
+        @JavascriptInterface
+        public String versionName() {
+            try {
+                return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            } catch (Exception e) {
+                return "";
+            }
+        }
+
         /** 歌曲源 + 播放状态提示 → 锁屏卡片上歌名右侧那个小标签 */
         @JavascriptInterface
         public void mediaInfo(String source, String notice, double loadPct) {

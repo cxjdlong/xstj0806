@@ -270,6 +270,7 @@
       <button class="mitem" id="plBtn">🎵 我的歌单</button>
       <button class="mitem fnos-only" id="libBtn">🎬 歌曲库管理</button>
       <button class="mitem" id="userChip" title="点两下退出登录">👤 —</button>
+      <div class="mitem" id="menuVer" style="color:#98a0ae;font-size:12.5px">版本 —</div>
     </div>
   </div>
 
@@ -654,6 +655,10 @@ async function boot() {
   paintColorBar();
   showApp();
   $('userChip').textContent = '👤 ' + ME.username;
+  try {
+    const v = (window.Android && Android.versionName) ? Android.versionName() : '';
+    $('menuVer').textContent = v ? ('NAS歌下载 v' + v) : '网页版（未装 App）';
+  } catch (e) {}
   fillPlSelect(); renderPlaylists();
   fillPlistSel(); loadQueue();
   loadTasks();

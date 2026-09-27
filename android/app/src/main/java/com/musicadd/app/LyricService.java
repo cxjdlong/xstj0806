@@ -105,6 +105,12 @@ public class LyricService extends Service {
         ALIVE = true;
         createChannel();
         createSession();
+        // 清掉旧版本遗留的“系统媒体卡片”通知（会和歌词卡片重复显示）
+        try {
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) nm.cancel(NOTIFY_ID_MEDIA);
+        } catch (Exception ignored) {
+        }
     }
 
     @Override
