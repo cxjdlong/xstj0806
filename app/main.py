@@ -187,6 +187,7 @@ class Task:
     playlistName: str = ""
     addStatus: str = ""  # "" | added | failed
     addNote: str = ""
+    revived: bool = False  # 是否已经自动补单过一次（避免反复复活）
 
 
 def _task_from_dict(d: dict) -> Task:
@@ -332,6 +333,42 @@ ADDS_LOCK = threading.Lock()
 ADD_WAIT_SECONDS = 1800  # 最多等 30 分钟入库（飞牛音乐扫库实测延迟较大）
 
 
+def _is_transient_add_error(exc: Exception) -> bool:
+    """飞牛音乐暂时不可用（socket 失效、容器挂载过期…）而不是这条歌有问题。
+
+    这类错误必须留在队列里等恢复，判成 failed 就再也不会自动重试了 ——
+    用户看到的现象就是「下载的歌在飞牛音乐里能看到，歌单里却没有」。
+    """
+    s = str(exc)
+    return any(k in s for k in ("不可达", "Connection refused", "No such file", "Connection reset",
+                                "timed out", "timeout"))
+
+
+def _match_candidate(cand: dict, title: str, artist: str, exact_only: bool = False) -> bool:
+    """飞牛曲库条目 vs 我们下载的曲目，判断是不是同一首。
+
+    难点：飞牛经常把「歌名 - 歌手」整串当 title、artist 字段留空（例如
+    title='下沙 - 游鸿明'、artists=[]），这时只比歌手字段永远匹配不上，
+    歌就永远加不进歌单。所以歌手字段缺失时，退一步看歌手名在不在标题串里。
+    """
+    nt, nf = _norm(title), _norm(cand.get("title") or "")
+    na, naf = _norm(artist), _norm(cand.get("artist") or "")
+    if not nt:
+        return False
+    exact = nt == nf
+    if exact_only and not exact:
+        return False
+    if not (exact or nt in nf or nf in nt):
+        return False
+    if na and naf:
+        # 两边歌手字段都有 → 必须能对上（_artist_match 对空串恒为 False，别拿它做入口判断）
+        return _artist_match(cand.get("artist") or "", artist)
+    if exact:
+        return True                   # 标题完全一致，另一边歌手字段缺失就认了
+    # 有一边歌手字段为空：要求歌手名确实出现在标题串里，避免张冠李戴
+    return bool((na and na in nf) or (naf and (naf in nt or naf in nf)))
+
+
 def _try_add_once(task: Task) -> bool:
     """尝试一次把曲目加进歌单。返回 True = 已处理完（成功或已定性失败）。"""
     guid = task.playlistGuid
@@ -348,21 +385,24 @@ def _try_add_once(task: Task) -> bool:
     try:
         found = fnos.search_track(token, title, size=20)
     except FnosMusicError as exc:
+        if _is_transient_add_error(exc):
+            # 飞牛音乐 socket 暂时不可用（升级/重启后容器挂载失效等）：
+            # 不能定性失败，留在队列里等它恢复，否则歌永远进不了歌单。
+            with TASKS_LOCK:
+                task.addNote = "等飞牛音乐就绪后自动重试"
+            return False
         with TASKS_LOCK:
             task.addStatus, task.addNote = "failed", str(exc)
         return True
 
     pick = None
-    for f in found:
-        if _norm(f["title"]) == _norm(title) and _artist_match(f["artist"], artist):
-            pick = f
-            break
-    if pick is None:
+    for exact_only in (True, False):     # 先认标题完全一致的，再退到互相包含
         for f in found:
-            nt, nf = _norm(title), _norm(f["title"])
-            if nt and (nt in nf or nf in nt) and _artist_match(f["artist"], artist):
+            if _match_candidate(f, title, artist, exact_only):
                 pick = f
                 break
+        if pick:
+            break
     if not pick:
         return False  # 还没入库，等下一轮
 
@@ -372,6 +412,10 @@ def _try_add_once(task: Task) -> bool:
             task.addStatus = "added"
             task.addNote = task.playlistName or ""
     except FnosMusicError as exc:
+        if _is_transient_add_error(exc):
+            with TASKS_LOCK:
+                task.addNote = "等飞牛音乐就绪后自动重试"
+            return False
         with TASKS_LOCK:
             task.addStatus, task.addNote = "failed", str(exc)
     return True
@@ -388,31 +432,80 @@ def _queue_playlist_add(task: Task, wait_seconds: int = ADD_WAIT_SECONDS) -> Non
         PENDING_ADDS[task.id] = time.time() + wait_seconds
 
 
+NEXT_TRY: dict[str, float] = {}
+
+
+def _revive_transient_failed() -> int:
+    """把「因飞牛音乐不可达 / 曲库一直没扫到而失败」的入单任务重新排队。
+
+    容器重建、socket 修好、或匹配规则修好后自动补单，不用用户一个个点「重试入单」。
+    每条任务最多自动复活一次（revived 标志），避免反复复活死循环。
+    """
+    with TASKS_LOCK:
+        cand = [
+            t for t in TASKS.values()
+            if t.addStatus == "failed" and t.playlistGuid and t.status in ("done", "skipped")
+            and not t.revived
+            and (_is_transient_add_error(Exception(t.addNote or "")) or "还没扫到" in (t.addNote or ""))
+        ]
+    for t in cand:
+        with TASKS_LOCK:
+            t.addStatus, t.addNote, t.revived = "waiting", "", True
+        with ADDS_LOCK:
+            PENDING_ADDS[t.id] = time.time() + ADD_WAIT_SECONDS
+    if cand:
+        _save_tasks()
+    return len(cand)
+
+
 def _adds_worker() -> None:
-    """后台入单：飞牛音乐扫库有延迟，隔一段时间试一次，超时则标失败（可手动重试）。"""
+    """后台入单线程。
+
+    退避节奏：刚下完的前 90 秒每 3 秒试一次（多数情况此时飞牛已入库，几秒内入单），
+    90 秒~5 分钟每 10 秒，之后每 30 秒，最长等 ADD_WAIT_SECONDS 才标失败。
+    """
+    revived = False
     while True:
-        time.sleep(20)
         try:
+            if not revived:
+                revived = True
+                n = _revive_transient_failed()
+                if n:
+                    print(f"[adds] 自动重试 {n} 个此前因飞牛音乐不可达而失败的入单任务", flush=True)
             with TASKS_LOCK:
                 pending = [t for t in TASKS.values() if t.addStatus == "waiting"]
+            now = time.time()
             for task in pending:
-                done = _try_add_once(task)
-                if done:
+                if now < NEXT_TRY.get(task.id, 0.0):
+                    continue
+                if _try_add_once(task):
                     with ADDS_LOCK:
                         PENDING_ADDS.pop(task.id, None)
+                    NEXT_TRY.pop(task.id, None)
                     _save_tasks()
                     continue
                 with ADDS_LOCK:
-                    deadline = PENDING_ADDS.get(task.id, time.time())
-                if time.time() >= deadline:
+                    deadline = PENDING_ADDS.get(task.id)
+                    if deadline is None:
+                        # 容器重启后 PENDING_ADDS 是空的，历史 waiting 任务要补一个 deadline，
+                        # 否则下面 now >= deadline 会立刻被判成失败。
+                        deadline = now + ADD_WAIT_SECONDS
+                        PENDING_ADDS[task.id] = deadline
+                if now >= deadline:
                     with TASKS_LOCK:
                         task.addStatus = "failed"
                         task.addNote = "曲库还没扫到，可点「重试入单」"
                     with ADDS_LOCK:
                         PENDING_ADDS.pop(task.id, None)
+                    NEXT_TRY.pop(task.id, None)
                     _save_tasks()
+                    continue
+                waited = ADD_WAIT_SECONDS - (deadline - now)
+                delay = 3 if waited < 90 else (10 if waited < 300 else 30)
+                NEXT_TRY[task.id] = now + delay
         except Exception:  # noqa: BLE001
-            continue
+            pass
+        time.sleep(2)
 
 
 threading.Thread(target=_adds_worker, daemon=True).start()
@@ -531,6 +624,56 @@ async def search(q: str, provider: str = "music-dl", user: str = Depends(current
         d["variant"] = t.is_variant
         out.append(d)
     return {"items": out, "provider": p.name}
+
+
+@app.get("/api/resolve")
+async def api_resolve(
+    title: str,
+    artist: str = "",
+    duration: int = 0,
+    provider: str = "music-dl",
+    user: str = Depends(current_user),
+):
+    """按「歌名+歌手+时长」在音源里挑**最佳匹配**的那首（供飞牛歌单整单播放逐首找源）。
+
+    与 /api/search 直接取第一条不同：这里复用 providers.match_track 打分，
+    避免「我的歌声里」被匹配成「承认」这类张冠李戴。
+    duration 单位＝秒（飞牛歌单接口已 //1000）。
+    """
+    want = (title or "").strip()
+    if not want:
+        raise HTTPException(status_code=400, detail="缺少歌名")
+    try:
+        p = providers.get(provider)
+    except KeyError:
+        raise HTTPException(status_code=400, detail=f"未知音源：{provider}")
+
+    keyword = (want + " " + (artist or "")).strip()
+    try:
+        cands = await p.search(keyword)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"搜索失败：{exc}") from exc
+
+    cands = providers.dedupe(cands)
+    scored: list[tuple[int, object]] = []
+    for c in cands:
+        sc = providers.match_track(c, want, artist or "", int(duration or 0))
+        if sc >= 3:
+            scored.append((sc, c))
+    if not scored:
+        return {"found": False, "item": None, "tried": len(cands)}
+    scored.sort(
+        key=lambda x: (
+            -x[0],
+            providers.SOURCE_ORDER.index(x[1].source) if x[1].source in providers.SOURCE_ORDER else 99,
+        )
+    )
+    best = scored[0][1]
+    d = best.to_dict()
+    d["token"] = best.token()
+    d["variant"] = best.is_variant
+    d["score"] = scored[0][0]
+    return {"found": True, "item": d}
 
 
 def _track_list_out(tracks, limit: int = 200) -> list[dict]:
@@ -889,41 +1032,312 @@ async def playlist_rename(payload: dict, user: str = Depends(current_user)):
     return {"ok": True, "items": items, "local": False}
 
 
+@app.get("/api/library/list")
+async def library_list(
+    page: int = 1, size: int = 15, q: str = "", user: str = Depends(current_user)
+):
+    """曲库歌曲列表（只给歌名/歌手，不给磁盘路径），每页默认 15 条。"""
+    if is_local(user):
+        raise HTTPException(status_code=400, detail="本地模式没有曲库")
+    if not MUSIC_DIR.is_dir():
+        return {"items": [], "total": 0, "page": 1, "size": size, "pages": 0}
+    kw = (q or "").strip().lower()
+    rows: list[dict] = []
+    for it in _scan_audio_files():
+        title, artist = it["title"], it["artist"]
+        if kw and kw not in title.lower() and kw not in (artist or "").lower():
+            continue
+        rows.append(it)
+    size = max(1, min(int(size or 15), 100))
+    page = max(1, int(page or 1))
+    start = (page - 1) * size
+    pages = (len(rows) + size - 1) // size if rows else 0
+    return {
+        "items": rows[start : start + size],
+        "total": len(rows),
+        "page": page,
+        "size": size,
+        "pages": pages,
+    }
+
+
+@app.post("/api/library/delete-file")
+async def library_delete_file(payload: dict, user: str = Depends(current_user)):
+    """按相对路径直接删除曲库里的一个文件（连同同名 .lrc）。"""
+    if is_local(user):
+        raise HTTPException(status_code=400, detail="本地模式没有曲库")
+    key = (payload.get("key") or "").strip()
+    if not key or ".." in key or key.startswith("/"):
+        raise HTTPException(status_code=400, detail="非法路径")
+    root = MUSIC_DIR.resolve()
+    p = (root / key).resolve()
+    if root not in p.parents:
+        raise HTTPException(status_code=400, detail="非法路径")
+    if not p.is_file() or p.suffix.lower() not in AUDIO_EXTS:
+        raise HTTPException(status_code=404, detail="文件不存在")
+    # 歌单保护：在别人歌单里 → 拒绝；在自己歌单里 → 要确认
+    t_title, t_artist = _title_artist_of(key)
+    _guard_delete(t_title, t_artist, user, bool(payload.get("confirm")))
+    try:
+        p.unlink()
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"删除失败：{exc}") from exc
+    lrc = p.with_suffix(".lrc")
+    if lrc.is_file():
+        try:
+            lrc.unlink()
+        except OSError:
+            pass
+    try:
+        if not any(p.parent.iterdir()):
+            p.parent.rmdir()
+    except OSError:
+        pass
+    return {"ok": True, "key": key}
+
+
+@app.post("/api/library/scan")
+async def library_scan(user: str = Depends(current_user)):
+    """触发飞牛音乐扫库 + 重建索引（曲库里新下的歌搜不到时用）。"""
+    if is_local(user):
+        raise HTTPException(status_code=400, detail="本地模式没有飞牛账号")
+    token = fnos.token_for(user)
+    if not token:
+        raise HTTPException(status_code=503, detail="该账号还没有飞牛音乐登录令牌")
+    return {"ok": True, "result": fnos.scan_library(token)}
+
+
 @app.get("/api/playlist/tracks")
 async def playlist_tracks(guid: str, user: str = Depends(current_user)):
-    """歌单里的曲目。本地歌单 → 直接可播放；飞牛歌单 → 请在飞牛音乐里播放。"""
+    """歌单里的曲目。本地歌单 → 存的曲目；飞牛歌单 → 走飞牛接口列出来。"""
     lp = local_playlist(guid)
     if lp is not None:
         tracks = lp.get("tracks") or []
         return {"local": True, "name": lp.get("name"), "items": tracks, "total": len(tracks)}
-    return {
-        "local": False,
-        "name": "",
-        "items": [],
-        "total": 0,
-        "note": "这是飞牛音乐的歌单，请在飞牛音乐里播放",
-    }
+
+    if is_local(user):
+        return {"local": False, "name": "", "items": [], "total": 0, "note": "本地模式看不到飞牛歌单"}
+    token = fnos.token_for(user)
+    if not token:
+        return {"local": False, "name": "", "items": [], "total": 0, "note": "该账号还没有飞牛音乐登录令牌"}
+    try:
+        items = fnos.playlist_tracks(token, guid)
+    except FnosMusicError as exc:
+        raise HTTPException(status_code=502, detail=f"取歌单曲目失败：{exc}") from exc
+    name = ""
+    for p in all_playlists(user):
+        if p.get("guid") == guid:
+            name = p.get("name") or ""
+            break
+    return {"local": False, "name": name, "items": items, "total": len(items)}
 
 
 @app.post("/api/playlist/remove-track")
 async def playlist_remove_track(payload: dict, user: str = Depends(current_user)):
-    """从本地歌单里移除一首歌。"""
+    """从歌单里移除一首歌。本地歌单改本地记录；飞牛歌单调飞牛接口（真同步）。"""
     guid = (payload.get("guid") or "").strip()
-    index = payload.get("index")
-    if local_playlist(guid) is None:
-        raise HTTPException(status_code=400, detail="只能管理本地歌单")
-    if index is None:
-        raise HTTPException(status_code=400, detail="缺少曲目序号")
-    index = int(index)
-    items = _load_local_playlists()
-    for p in items:
-        if p.get("guid") == guid:
-            tracks = p.get("tracks") or []
-            if 0 <= index < len(tracks):
-                tracks.pop(index)
-                p["tracks"] = tracks
-    _save_local_playlists(items)
-    return {"ok": True, "items": all_playlists(user)}
+    if not guid:
+        raise HTTPException(status_code=400, detail="缺少歌单")
+
+    # —— 本地歌单：按序号删本地记录 ——
+    if local_playlist(guid) is not None:
+        index = payload.get("index")
+        if index is None:
+            raise HTTPException(status_code=400, detail="缺少曲目序号")
+        index = int(index)
+        items = _load_local_playlists()
+        for p in items:
+            if p.get("guid") == guid:
+                tracks = p.get("tracks") or []
+                if 0 <= index < len(tracks):
+                    tracks.pop(index)
+                    p["tracks"] = tracks
+        _save_local_playlists(items)
+        return {"ok": True, "items": all_playlists(user), "local": True}
+
+    # —— 飞牛歌单：按曲目 guid 调飞牛接口 ——
+    if is_local(user):
+        raise HTTPException(status_code=400, detail="本地模式只能管理本地歌单")
+    track_guid = (payload.get("trackGuid") or "").strip()
+    if not track_guid:
+        raise HTTPException(status_code=400, detail="缺少曲目")
+    token = fnos.token_for(user)
+    if not token:
+        raise HTTPException(status_code=503, detail="该账号还没有飞牛音乐登录令牌")
+    try:
+        fnos.remove_tracks(token, guid, [track_guid])
+    except FnosMusicError as exc:
+        raise HTTPException(status_code=502, detail=f"从歌单移除失败：{exc}") from exc
+    return {"ok": True, "items": all_playlists(user), "local": False}
+
+
+def _scan_audio_files() -> list[dict]:
+    """列出曲库里的音频文件，兼容两种存放布局：
+
+    1) <歌手>/<歌名>.mp3          （历史入库的）
+    2) <歌名> - <歌手>.mp3        （新下载直接放根目录的）
+    返回 [{key, title, artist}, ...]，key 是相对曲库根的路径。
+    """
+    items: list[dict] = []
+    if not MUSIC_DIR.is_dir():
+        return items
+    for p in sorted(MUSIC_DIR.rglob("*")):
+        try:
+            if not p.is_file() or p.suffix.lower() not in AUDIO_EXTS:
+                continue
+            rel = p.relative_to(MUSIC_DIR)
+        except OSError:
+            continue
+        parts = rel.parts
+        if len(parts) >= 2:
+            title, artist = p.stem, p.parent.name
+        else:
+            stem = p.stem
+            if " - " in stem:
+                t, a = stem.rsplit(" - ", 1)
+                title, artist = t.strip(), a.strip()
+            else:
+                title, artist = stem, ""
+        items.append({"key": str(rel), "title": title, "artist": artist})
+    return items
+
+
+def _title_artist_of(key: str) -> tuple[str, str]:
+    """由曲库相对路径推出 (歌名, 歌手)，兼容两种布局。"""
+    p = MUSIC_DIR / key
+    parts = Path(key).parts
+    if len(parts) >= 2:
+        return p.stem, p.parent.name
+    stem = p.stem
+    if " - " in stem:
+        t, a = stem.rsplit(" - ", 1)
+        return t.strip(), a.strip()
+    return stem, ""
+
+
+def _who_has_track(title: str, artist: str = "") -> dict[str, list[str]]:
+    """查这首歌出现在哪些账号的哪些歌单里。
+
+    直接查飞牛的音乐库（playlist_track × playlist × track × user），毫秒级，
+    而且查的是当前真实状态 —— 歌单里加了歌/删了歌，下一次检查立刻反映，
+    不存在缓存过期问题。查询失败时抛错（宁可拒绝删除，也不冒险误删）。
+    """
+    if not title:
+        return {}
+    want = title.strip()
+    try:
+        rows = fnos._db_query(
+            "SELECT p.name, u.name FROM playlist_track pt "
+            "JOIN playlist p ON p.id = pt.playlist_id "
+            "JOIN track t ON t.id = pt.track_id "
+            "LEFT JOIN user u ON u.id = pt.user_id "
+            "WHERE t.title = ?",
+            (want,),
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=503,
+            detail=f"无法检查这首歌是否被歌单占用（{exc}），为保证数据安全已拒绝删除",
+        ) from exc
+    out: dict[str, list[str]] = {}
+    for pname, uname in rows:
+        key = (uname or "").strip() or "未知账号"
+        out.setdefault(key, []).append((pname or "").strip() or "(未命名)")
+    return out
+
+
+def _guard_delete(title: str, artist: str, user: str, confirmed: bool) -> None:
+    """删除前的歌单保护检查。"""
+    owner_map = _who_has_track(title, artist)
+    others = {u: pls for u, pls in owner_map.items() if u != user}
+    if others:
+        detail = "；".join(f"{u} 的歌单「{'、'.join(pls)}」" for u, pls in others.items())
+        raise HTTPException(
+            status_code=403,
+            detail=f"这首歌还在别人的歌单里，不允许删除：{detail}",
+        )
+    mine = owner_map.get(user)
+    if mine and not confirmed:
+        raise HTTPException(
+            status_code=409,
+            detail=f"这首歌在你的歌单「{'、'.join(mine)}」里，确认要删除吗？",
+        )
+
+
+AUDIO_EXTS = {".mp3", ".flac", ".m4a", ".wav", ".ape", ".ogg", ".aac", ".wma"}
+
+
+def _delete_library_files(title: str, artist: str) -> list[str]:
+    """删除曲库磁盘上对应的音频文件（连同同名 .lrc 歌词），返回删掉的文件名。"""
+    if not title or not MUSIC_DIR.is_dir():
+        return []
+    artists = [a.strip() for a in re.split(r"[、,/&;]", artist or "") if a.strip()]
+    targets: list[Path] = []
+    # 1) 优先按「歌手/歌名」精确定位（艺术家可能是多人，逐个试）
+    for a in artists:
+        for ext in AUDIO_EXTS:
+            p = MUSIC_DIR / a / f"{title}{ext}"
+            if p.is_file():
+                targets.append(p)
+    # 2) 没命中就在二级目录里按歌名兜底找
+    if not targets:
+        for p in MUSIC_DIR.glob(f"*/{title}.*"):
+            if p.is_file() and p.suffix.lower() in AUDIO_EXTS:
+                targets.append(p)
+    removed: list[str] = []
+    for p in targets:
+        try:
+            p.unlink()
+        except OSError:
+            continue
+        removed.append(str(p.relative_to(MUSIC_DIR)))
+        lrc = p.with_suffix(".lrc")
+        if lrc.is_file():
+            try:
+                lrc.unlink()
+            except OSError:
+                pass
+    return removed
+
+
+@app.post("/api/track/delete")
+async def track_delete(payload: dict, user: str = Depends(current_user)):
+    """彻底删除一首歌：飞牛音乐库记录 + 曲库磁盘文件（真删，不可恢复）。"""
+    if is_local(user):
+        raise HTTPException(status_code=400, detail="本地模式没有飞牛曲库")
+    guid = (payload.get("guid") or "").strip()
+    title = (payload.get("title") or "").strip()
+    artist = (payload.get("artist") or "").strip()
+    if not guid and not (title and artist):
+        raise HTTPException(status_code=400, detail="缺少曲目信息")
+    token = fnos.token_for(user)
+    if not token:
+        raise HTTPException(status_code=503, detail="该账号还没有飞牛音乐登录令牌")
+
+    # 歌单保护：在别人歌单里 → 拒绝；在自己歌单里 → 要确认
+    _guard_delete(title, artist, user, bool(payload.get("confirm")))
+
+    # 1) 飞牛音乐库记录：飞牛没有开放「删曲目」的 API（试遍路径都是 502），
+    #    删掉磁盘文件后，飞牛下次扫库会自动把这条清掉，效果一致。
+    db_ok, db_err = False, ""
+    if guid:
+        try:
+            fnos.delete_tracks(token, [guid])
+            db_ok = True
+        except FnosMusicError:
+            db_err = "飞牛未开放删曲目接口，已改由删文件同步（下次扫库自动清理）"
+
+    # 2) 曲库磁盘文件删掉（真正生效的一步）
+    removed = _delete_library_files(title, artist)
+    if not removed and not db_ok:
+        raise HTTPException(status_code=502, detail="没找到这首歌的文件（可能已经被删掉了）")
+    return {
+        "ok": True,
+        "db": db_ok,
+        "dbError": db_err,
+        "files": removed,
+        "note": "文件已删除，飞牛音乐下次扫库后会自动消失" if not db_ok else "已同步删除",
+    }
 
 
 @app.post("/api/playlist/delete")

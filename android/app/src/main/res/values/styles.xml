@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="AppTheme" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@android:color/black</item>
-        <item name="android:statusBarColor">#0F0F0F</item>
-        <item name="android:navigationBarColor">#0F0F0F</item>
+    <!-- 浅色主题：窗口底色跟着网页走，别用纯黑（否则启动/切换时闪黑） -->
+    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#F2F4F8</item>
+        <item name="android:statusBarColor">#F2F4F8</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 
     <!-- 锁屏歌词：当前句（大字，绿色高亮） -->
@@ -39,5 +41,18 @@
         <item name="android:textSize">12sp</item>
         <item name="android:textColor">#66FFFFFF</item>
         <item name="android:text">" "</item>
+    </style>
+
+    <!-- 通知里的控制按钮：上一首 / 播放暂停 / 下一首 -->
+    <style name="NBtn">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginLeft">22dp</item>
+        <item name="android:layout_marginRight">22dp</item>
+        <item name="android:paddingLeft">6dp</item>
+        <item name="android:paddingRight">6dp</item>
+        <item name="android:textColor">#E6FFFFFF</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:gravity">center</item>
     </style>
 </resources>

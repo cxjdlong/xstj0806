@@ -6,3 +6,6 @@ android/local.properties
 *.iml
 .idea/
 .DS_Store
+
+# 本地改动前的备份目录（不提交）
+.bak-*/

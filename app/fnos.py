@@ -184,6 +184,104 @@ class FnosMusic:
             token=token,
         )
 
+    def playlist_tracks(self, token: str, playlist_guid: str, size: int = 100) -> list[dict]:
+        """列歌单内曲目。
+
+        唯一正确接口：GET /music/api/v1/track/playlist-detail/list
+        参数名必须是大写 playlistGUID（小写/别的名字不报错但返回曲库列表）。
+        """
+        out: list[dict] = []
+        page = 1
+        while True:
+            data = self._request(
+                "GET",
+                f"/music/api/v1/track/playlist-detail/list"
+                f"?playlistGUID={playlist_guid}&page={page}&size={size}&sort=",
+                token=token,
+            ) or {}
+            lst = data.get("list") or []
+            for t in lst:
+                artists = t.get("artists") or []
+                out.append(
+                    {
+                        "guid": t.get("guid"),
+                        "title": t.get("title"),
+                        "artist": "、".join(a.get("name", "") for a in artists),
+                        "duration": (t.get("duration") or 0) // 1000,
+                    }
+                )
+            total = data.get("total") or 0
+            if not lst or len(out) >= total:
+                break
+            page += 1
+        return out
+
+    def scan_library(self, token: str) -> dict:
+        """触发飞牛音乐扫库 + 重建搜索索引（把曲库里的新文件扫进去）。
+
+        路由是从应用前端 JS 里挖出来的，前缀/归属有几种可能，逐个试。
+        """
+        out: dict = {}
+        for path in (
+            "/music/api/v1/scan-all",
+            "/music/api/v1/library/scan-all",
+            "/music/api/v1/library/scan",
+            "/music/api/v1/index/rebuild",
+            "/music/api/v1/library/index/rebuild",
+        ):
+            try:
+                out[path] = self._request("POST", path, {}, token=token)
+            except Exception as exc:  # noqa: BLE001
+                out[path] = f"ERR {exc}"
+        return out
+
+    def remove_tracks(self, token: str, playlist_guid: str, track_guids: list[str]) -> None:
+        """从歌单里移除曲目（与 add_tracks 对称：POST /playlist/remove-track）。"""
+        if not track_guids:
+            return
+        self._request(
+            "POST",
+            "/music/api/v1/playlist/remove-track",
+            {"guid": playlist_guid, "trackGUIDs": list(track_guids)},
+            token=token,
+        )
+
+    def delete_tracks(self, token: str, track_guids: list[str]) -> None:
+        """从飞牛音乐曲库里删除曲目。
+
+        路由和参数名都没在文档里，自动逐个试（路径 × 参数格式），
+        哪个先成功就用哪个。用假 guid 探测不会误删。
+        """
+        if not track_guids:
+            return
+        g0 = track_guids[0]
+        bodies: list[dict] = [
+            {"trackGUIDs": list(track_guids)},
+            {"guids": list(track_guids)},
+            {"guid": g0},
+            {"trackGuid": g0},
+            {"trackGUID": g0},
+            {"trackGuids": list(track_guids)},
+        ]
+        paths = [
+            "/music/api/v1/track/delete",
+            "/music/api/v1/track/remove",
+            "/music/api/v1/track/delete-track",
+            "/music/api/v1/tracks/delete",
+            "/music/api/v1/library/track/delete",
+            "/music/api/v1/media/delete",
+        ]
+        last: Exception | None = None
+        for path in paths:
+            for body in bodies:
+                try:
+                    self._request("POST", path, body, token=token)
+                    self._delete_route = (path, tuple(body.keys()))  # 记住成功的组合
+                    return
+                except Exception as exc:  # noqa: BLE001
+                    last = exc
+        raise last if last else FnosMusicError("删除曲目失败")
+
     def delete_playlist(self, token: str, playlist_guid: str) -> None:
         """删除飞牛音乐里的歌单（POST /music/api/v1/playlist/delete {"guid": ...}）。"""
         self._request(

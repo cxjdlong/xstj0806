@@ -2,13 +2,13 @@ package com.musicadd.app;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
@@ -19,11 +19,14 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
+import java.lang.ref.WeakReference;
+
 /**
- * 添加歌曲 · 安卓壳（在线 WebView）
+ * NAS歌下载 · 安卓壳（在线 WebView）
  *
- * 直接加载 NAS 上的 music-add 网页（默认 http://192.168.10.10:19018），
- * 页面本身已做手机自适应，壳层只负责：全屏显示、禁用缩放/回弹、加载失败时给出改地址入口。
+ * 直接加载 NAS 上的 music-add 网页（默认 https://music.dx66.top:8888/），页面自己做手机适配。
+ * 壳层负责：全屏显示、禁用缩放/回弹、加载失败给改地址入口、返回键交给网页处理（回首页而不是直接退出）、
+ * 以及把播放状态交给 LyricService 的原生 MediaSession（耳机线控 / 车机上一首下一首）。
  *
  * 后门：连按返回键 3 次（1.5 秒内）= 打开服务器地址设置页。
  */
@@ -35,16 +38,21 @@ public class MainActivity extends Activity {
     private static final String KEY_USER = "fnos_user";
     private static final String SETUP_PAGE = "file:///android_asset/setup.html";
 
+    /** 给 LyricService 回调网页用（耳机键 → 网页播放控制） */
+    private static WeakReference<MainActivity> INSTANCE = new WeakReference<>(null);
+
     private WebView web;
     private SharedPreferences prefs;
     private long lastBackAt = 0L;
     private int backCount = 0;
     private boolean isPlaying = false;   // 播放中就不挂起 WebView（锁屏/后台继续放）
+    private AlertDialog exitDialog;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        INSTANCE = new WeakReference<>(this);
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
 
         FrameLayout root = new FrameLayout(this);
@@ -68,7 +76,7 @@ public class MainActivity extends Activity {
         s.setMediaPlaybackRequiresUserGesture(false);
 
         web.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        web.setBackgroundColor(0xFF0F0F0F);
+        web.setBackgroundColor(0xFFF2F4F8);          // 浅色主题：别用黑色背板（否则页面切换时闪黑）
         web.addJavascriptInterface(new Bridge(), "Android");
 
         web.setWebViewClient(new WebViewClient() {
@@ -107,7 +115,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** 把歌词/播放状态丢给前台服务（锁屏通知）。lines 是 5 行歌词，用换行符分隔 */
+    /** 把歌词/播放状态丢给前台服务（锁屏通知 + 原生 MediaSession）。lines 是多行歌词，用换行符分隔 */
     private void sendToService(String action, String lines, String title, String artist, String colorHex) {
         isPlaying = true;
         Intent i = new Intent(this, LyricService.class);
@@ -116,6 +124,11 @@ public class MainActivity extends Activity {
         i.putExtra("title", title == null ? "" : title);
         i.putExtra("artist", artist == null ? "" : artist);
         i.putExtra("color", parseColor(colorHex));
+        startServiceSafe(i);
+    }
+
+    /** 起服务（O 以上走 startForegroundService，失败不崩） */
+    private void startServiceSafe(Intent i) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(i);
             else startService(i);
@@ -143,7 +156,27 @@ public class MainActivity extends Activity {
         return base + sep + "u=" + Uri.encode(user.trim());
     }
 
-    /** 暴露给内置设置页的桥 */
+    /* ---------------- 原生 MediaSession → 网页（耳机线控 / 车机按键） ---------------- */
+
+    /** LyricService 收到媒体键后调这里，把动作转给网页 */
+    static void sendMediaCmd(String cmd) {
+        MainActivity a = INSTANCE.get();
+        if (a == null || cmd == null) return;
+        final String c = cmd.replace("'", "");   // 只可能是固定动作名，做个保险
+        a.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (a.web != null) {
+                        a.web.evaluateJavascript("window.maNative && window.maNative.cmd('" + c + "')", null);
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        });
+    }
+
+    /** 暴露给内置设置页 / 网页的桥 */
     public class Bridge {
         @JavascriptInterface
         public String defaultUrl() {
@@ -162,7 +195,7 @@ public class MainActivity extends Activity {
             return u == null ? "" : u;
         }
 
-        /** 网页歌词换行 → 更新锁屏通知（lines = 5 行，用 \u0001 分隔，中间那行是当前句） */
+        /** 网页歌词换行 → 更新锁屏通知（lines 用 \n 分隔，中间那行是当前句） */
         @JavascriptInterface
         public void lyric(String lines, String title, String artist, String colorHex) {
             sendToService(LyricService.ACTION_UPDATE, lines, title, artist, colorHex);
@@ -184,6 +217,26 @@ public class MainActivity extends Activity {
                 startService(i);
             } catch (Exception ignored) {
             }
+        }
+
+        /**
+         * 播放信息 → 原生 MediaSession（耳机上一首/下一首、车机显示歌名歌手封面）。
+         * 服务没在跑时直接忽略，避免平白无故冒出通知。
+         */
+        @JavascriptInterface
+        public void mediaMeta(String title, String artist, String album, String cover,
+                              double durMs, double posMs, boolean playing) {
+            if (!LyricService.isAlive()) return;
+            Intent i = new Intent(MainActivity.this, LyricService.class);
+            i.setAction(LyricService.ACTION_META);
+            i.putExtra("title", title == null ? "" : title);
+            i.putExtra("artist", artist == null ? "" : artist);
+            i.putExtra("album", album == null ? "" : album);
+            i.putExtra("cover", cover == null ? "" : cover);
+            i.putExtra("durMs", (long) durMs);
+            i.putExtra("posMs", (long) posMs);
+            i.putExtra("playing", playing);
+            startServiceSafe(i);
         }
 
         /** 服务器地址 + 飞牛音乐账号一起保存（两个都必填，前端已校验，这里再兜一层） */
@@ -232,24 +285,52 @@ public class MainActivity extends Activity {
         }
     }
 
+    /* ---------------- 返回键：先让网页退（关弹层 / 回首页），首页才弹退出确认 ---------------- */
+
     @Override
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_BACK) {
-            long now = System.currentTimeMillis();
-            if (now - lastBackAt > 1500) backCount = 0;
-            lastBackAt = now;
-            backCount++;
-            if (backCount >= 3) {          // 连按三次 → 设置页
-                backCount = 0;
-                web.loadUrl(SETUP_PAGE);
-                return true;
-            }
-            if (web != null && web.canGoBack()) {
-                web.goBack();
-                return true;
-            }
+    public void onBackPressed() {
+        // 连按三次返回 → 设置页（改服务器地址的后门）
+        long now = System.currentTimeMillis();
+        if (now - lastBackAt > 1500) backCount = 0;
+        lastBackAt = now;
+        backCount++;
+        if (backCount >= 3) {
+            backCount = 0;
+            if (web != null) web.loadUrl(SETUP_PAGE);
+            return;
         }
-        return super.onKeyDown(keyCode, event);
+        if (web == null) {
+            super.onBackPressed();
+            return;
+        }
+        // 让网页自己决定：它处理了就到此为止，返回 'home' 说明已经在首页 → 弹退出确认
+        web.evaluateJavascript("(window.maBack ? window.maBack() : 'home')", value -> {
+            if (value == null || !value.contains("handled")) showExitDialog();
+        });
+    }
+
+    /** 退出确认：不直接退出 App */
+    private void showExitDialog() {
+        if (exitDialog != null && exitDialog.isShowing()) return;
+        String msg = isPlaying
+                ? "确定要关闭「NAS歌下载」吗？\n退出后正在播放的音乐会停止。"
+                : "确定要关闭「NAS歌下载」吗？";
+        exitDialog = new AlertDialog.Builder(this)
+                .setTitle("退出应用")
+                .setMessage(msg)
+                .setPositiveButton("退出", (d, w) -> {
+                    try {
+                        Intent i = new Intent(MainActivity.this, LyricService.class);
+                        i.setAction(LyricService.ACTION_STOP);
+                        startService(i);
+                    } catch (Exception ignored) {
+                    }
+                    finish();
+                })
+                .setNegativeButton("取消", (d, w) -> {
+                })
+                .create();
+        exitDialog.show();
     }
 
     @Override
@@ -267,6 +348,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (INSTANCE.get() == this) INSTANCE = new WeakReference<>(null);
         if (web != null) web.destroy();
         super.onDestroy();
     }
