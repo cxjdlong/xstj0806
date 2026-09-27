@@ -44,6 +44,8 @@ public class LyricService extends Service {
     public static final String ACTION_KEY = "com.musicadd.app.MEDIA_KEY";
     /** 播放模式变化（顺/循/单/随） */
     public static final String ACTION_MODE = "com.musicadd.app.MEDIA_MODE";
+    /** 歌曲源 / 播放状态提示（歌名右侧那个小标签） */
+    public static final String ACTION_INFO = "com.musicadd.app.MEDIA_INFO";
 
     /** 通知按钮里的“模式”虚拟键码 */
     private static final int KEY_MODE = 0;
@@ -78,6 +80,10 @@ public class LyricService extends Service {
     private Bitmap fallbackCover;      // 没有封面时用 App 图标顶位
     /** 播放模式：order/loop/one/shuffle（由网页同步过来，通知上的模式键显示用） */
     private String mode = "loop";
+    /** 歌名右侧标签：歌曲源（如“网易云”） */
+    private String source = "";
+    /** 歌名右侧标签：播放异常提示（换源失败/取不到流…），为空时显示 source */
+    private String notice = "";
     private String[] lines = new String[]{"", "", ""};
     private int color = Color.WHITE;
 
@@ -241,14 +247,24 @@ public class LyricService extends Service {
                 stopSelf();
                 return START_NOT_STICKY;
             }
-            if (intent.hasExtra("title")) title = nz(intent.getStringExtra("title"));
+            if (intent.hasExtra("title")) {
+                String nt = nz(intent.getStringExtra("title"));
+                if (!nt.equals(title)) notice = "";     // 换歌了 → 清掉上一首的报错提示
+                title = nt;
+            }
             if (intent.hasExtra("artist")) artist = nz(intent.getStringExtra("artist"));
             if (ACTION_META.equals(action)) {
                 if (intent.hasExtra("album")) album = nz(intent.getStringExtra("album"));
                 if (intent.hasExtra("cover")) coverUrl = nz(intent.getStringExtra("cover"));
                 if (intent.hasExtra("durMs")) durationMs = intent.getLongExtra("durMs", 0L);
                 if (intent.hasExtra("posMs")) positionMs = intent.getLongExtra("posMs", 0L);
-                if (intent.hasExtra("playing")) playing = intent.getBooleanExtra("playing", playing);
+                if (intent.hasExtra("playing")) {
+                    boolean now = intent.getBooleanExtra("playing", playing);
+                    if (now != playing) {
+                        playing = now;
+                        refreshNotification();        // 播放/暂停图标要立刻跟着变
+                    }
+                }
                 if (!coverUrl.isEmpty()) loadCover(coverUrl);
             } else if (ACTION_KEY.equals(action)) {
                 int kc = intent.getIntExtra("keyCode", 0);
@@ -277,6 +293,11 @@ public class LyricService extends Service {
                 return START_STICKY;
             } else if (ACTION_MODE.equals(action)) {
                 if (intent.hasExtra("mode")) mode = nz(intent.getStringExtra("mode"));
+                refreshNotification();
+                return START_STICKY;
+            } else if (ACTION_INFO.equals(action)) {
+                if (intent.hasExtra("source")) source = nz(intent.getStringExtra("source"));
+                if (intent.hasExtra("notice")) notice = nz(intent.getStringExtra("notice"));
                 refreshNotification();
                 return START_STICKY;
             } else if (intent.hasExtra("lines")) {
@@ -337,6 +358,21 @@ public class LyricService extends Service {
         rv.setOnClickPendingIntent(R.id.n_prog, openAppIntent());
         rv.setOnClickPendingIntent(R.id.n_back10, mediaKeyIntent(NOTIFY_ID * 10 + 5, KEY_BACK10));
         rv.setOnClickPendingIntent(R.id.n_fwd10, mediaKeyIntent(NOTIFY_ID * 10 + 6, KEY_FWD10));
+
+        // 歌名右侧：有异常提示就显示提示（橙红），否则显示歌曲源
+        String badge = !notice.isEmpty() ? notice : source;
+        rv.setTextViewText(R.id.n_badge, badge.isEmpty() ? "" : badge);
+        rv.setInt(R.id.n_badge, "setBackgroundResource",
+                notice.isEmpty() ? R.drawable.nmode_bg : R.drawable.nbadge_alert);
+        rv.setTextColor(R.id.n_badge, notice.isEmpty() ? 0xCCFFFFFF : 0xFFFFFFFF);
+        if (badge.isEmpty()) {
+            rv.setViewVisibility(R.id.n_badge, android.view.View.GONE);
+        } else {
+            rv.setViewVisibility(R.id.n_badge, android.view.View.VISIBLE);
+        }
+
+        // 播放/暂停键跟着状态变：播放中显示暂停，暂停时显示播放
+        rv.setTextViewText(R.id.n_toggle, playing ? "❚❚" : "▶");
 
         // 播放模式键：顺 / 循 / 单 / 随（随机时按钮变蓝）
         rv.setTextViewText(R.id.n_mode, modeLabel());

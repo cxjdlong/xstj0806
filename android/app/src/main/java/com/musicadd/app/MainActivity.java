@@ -239,6 +239,17 @@ public class MainActivity extends Activity {
             startServiceSafe(i);
         }
 
+        /** 歌曲源 + 播放状态提示 → 锁屏卡片上歌名右侧那个小标签 */
+        @JavascriptInterface
+        public void mediaInfo(String source, String notice) {
+            if (!LyricService.isAlive()) return;
+            Intent i = new Intent(MainActivity.this, LyricService.class);
+            i.setAction(LyricService.ACTION_INFO);
+            i.putExtra("source", source == null ? "" : source);
+            i.putExtra("notice", notice == null ? "" : notice);
+            startServiceSafe(i);
+        }
+
         /** 播放模式（order/loop/one/shuffle）→ 锁屏卡片上的模式键 */
         @JavascriptInterface
         public void mediaMode(String mode) {

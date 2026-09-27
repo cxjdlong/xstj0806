@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 歌名右侧标签：有播放异常时用的橙红底 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#E2503C" />
+    <corners android:radius="8dp" />
+</shape>

@@ -1431,10 +1431,38 @@ window.maNative = {
   },
 };
 
+/* 音源 id → 中文短名（锁屏卡片歌名右侧显示） */
+const SRC_NAME = {
+  netease: '网易云', qq: 'QQ音乐', kugou: '酷狗', kuwo: '酷我', migu: '咪咕',
+  qianqian: '千千', joox: 'JOOX', apple: 'Apple', soda: '汽水', fivesing: '5sing',
+  bilibili: 'B站', local: '本地', fnos: '飞牛',
+};
+const srcLabel = (s) => SRC_NAME[s] || (s || '');
+
+/* 播放异常/换源提示：既弹 toast，也推到锁屏卡片（歌名右侧），到点自动恢复显示歌曲源 */
+let PLAY_NOTICE = '', NOTICE_TIMER = null;
+function pushNativeInfo(src, notice) {
+  if (!window.Android || !Android.mediaInfo) return;
+  const n = (notice === undefined) ? PLAY_NOTICE : notice;
+  try { Android.mediaInfo(src || '', n || ''); } catch (e) {}
+}
+function playNotice(msg, ms) {
+  const hold = ms || 3000;
+  toast(msg, hold);
+  PLAY_NOTICE = msg;
+  pushNativeInfo(srcLabel(CURRENT && CURRENT.source));
+  clearTimeout(NOTICE_TIMER);
+  NOTICE_TIMER = setTimeout(() => {
+    PLAY_NOTICE = '';
+    pushNativeInfo(srcLabel(CURRENT && CURRENT.source));
+  }, hold);
+}
+
 /* 把播放状态交给 App 壳的原生 MediaSession（耳机媒体键 / 车机显示歌名歌手封面） */
 function pushNativeMeta(t, playing) {
   if (!t || !window.Android || !Android.mediaMeta) return;
   pushNativeMode();
+  pushNativeInfo(srcLabel(t.source));      // 歌名右侧的歌曲源（有提示时提示优先）
   try {
     Android.mediaMeta(t.title || '', t.artist || '', t.album || '', t.cover || '',
       Math.round((audio.duration || t.duration || 0) * 1000),
@@ -1481,10 +1509,10 @@ async function play(t, replaceToken) {
   // 飞牛音乐歌单的曲目只有歌名/歌手、没有音源 token：播放前先按「歌名+歌手」现搜音源
   if (t._needsResolve) {
     const slot = QUEUE.findIndex(x => x.token === t.token);
-    toast('正在找音源…', 1600);
+    playNotice('正在找音源…', 2500);
     let hit = null;
     try { hit = await findSourceFor(t); } catch (e) {}
-    if (!hit) { toast('没找到可播放的音源：' + (t.title || ''), 3000); return; }
+    if (!hit) { playNotice('没找到音源', 5000); return; }
     if (slot >= 0) { QUEUE[slot] = hit; saveQueue(); renderPlist(); }
     t = hit;
     prefetchNext();
@@ -1499,7 +1527,7 @@ async function play(t, replaceToken) {
   }
   CURRENT = t;
   audio.src = '/api/stream?t=' + q(t.token);
-  audio.play().catch(e => toast('播放失败：' + e.message));
+  audio.play().catch(e => playNotice('播放失败：' + e.message, 5000));
   // 歌词：面板开着就刷新；开关是“开”的则自动弹出
   if (!$('lrcSheet').hidden) loadLyric(t);
   else if (localStorage.getItem(LRC_ON_KEY) === '1') lrcShow(true);
@@ -1553,16 +1581,16 @@ audio.ontimeupdate = () => {
 audio.onended = () => { $('playToggle').textContent = '▶'; playNext(1, true); };
 audio.onerror = async () => {
   if (!audio.src || !CURRENT) return;
-  if (CURRENT._switched) { toast('换源后仍取不到流，换一首试试'); return; }
+  if (CURRENT._switched) { playNotice('换源失败，请换一首', 6000); return; }
   const key = CURRENT.token;
-  toast('取流失败，正在自动换源…', 1500);
+  playNotice('取流失败，自动换源…', 3000);
   try {
     const alt = await api('/api/alt?t=' + q(key));
     alt._switched = true;
-    toast('已自动换到 ' + alt.source + ' 源', 2000);
+    playNotice('已换到 ' + srcLabel(alt.source) + ' 源', 3500);
     play(alt, key);   // 替换播放列表里那一首，不新增
   } catch (e) {
-    toast('这首歌取不到流：' + e.message, 3200);
+    playNotice('取不到流：' + e.message, 6000);
   }
 };
 
@@ -1947,10 +1975,10 @@ async function openPlTracks(guid, name) {
       el.onclick = async () => {
         const t = PT.items[parseInt(el.dataset.pb, 10)] || {};
         if (!t.title) return;
-        toast('正在找音源…');
+        playNotice('正在找音源…', 2500);
         try {
           const hit = await findSourceFor(t);
-          if (!hit) { toast('没找到可播放的音源：' + t.title); return; }
+          if (!hit) { playNotice('没找到音源', 5000); return; }
           play(hit);
           toast('播放：' + hit.title + (hit.artist ? ' - ' + hit.artist : ''));
         } catch (e) { toast('播放失败：' + e.message); }
