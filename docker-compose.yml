@@ -18,7 +18,7 @@ services:
       # 安卓包目录（宿主 sync-apk.sh 把最新 APK 放这里，/music.apk 直接下载）
       - ./apk:/apk:ro
       # 前端静态文件挂载：改界面只需替换文件，不用重建镜像
-      - ./app/static:/app/static:ro
+      - ./app/static:/app/app/static:ro     # 代码在 /app/app（Dockerfile 里 COPY app ./app）
     environment:
       MUSICDL_BASE: "http://192.168.10.10:19010/music"
       MUSIC_DIR: "/music"

@@ -50,10 +50,12 @@ public class LyricService extends Service {
 
     private static final String CHANNEL_ID = "musicadd_play";
     private static final int NOTIFY_ID = 1001;
-    /** 锁屏卡片歌词行数：上 1 行 + 当前句 + 下 1 行 */
+    /** 网页一次推 3 行（上 1 + 当前句 + 下 1），锁屏卡片只显示中间那一行（当前句） */
     private static final int ROWS = 3;
-    /** 当前句固定显示在第几行（0 起，第 1 行 = 正中间） */
     private static final int CUR_ROW = 1;
+    /** 进度条两头的 ±10 秒按钮 */
+    private static final int KEY_BACK10 = -10;
+    private static final int KEY_FWD10 = 10;
     /** 网页把多行歌词用换行符拼成一串传过来（歌词本身不含换行，安全） */
     private static final String SEP = "\n";
 
@@ -252,6 +254,13 @@ public class LyricService extends Service {
                 int kc = intent.getIntExtra("keyCode", 0);
                 if (kc == KEY_MODE) {
                     MainActivity.sendMediaCmd("mode");     // 网页切完模式会把新模式回传过来
+                } else if (kc == KEY_BACK10 || kc == KEY_FWD10) {
+                    long target = positionMs + kc * 1000L;   // 相对当前位置跳 ±10 秒
+                    if (target < 0) target = 0;
+                    if (durationMs > 0 && target > durationMs) target = durationMs;
+                    positionMs = target;
+                    MainActivity.sendMediaCmd("seek:" + (target / 1000));
+                    refreshNotification();                   // 进度条立刻跟上
                 } else if (kc == android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS) {
                     MainActivity.sendMediaCmd("prev");
                 } else if (kc == android.view.KeyEvent.KEYCODE_MEDIA_NEXT) {
@@ -310,30 +319,31 @@ public class LyricService extends Service {
         Bitmap cover = (coverBmp != null) ? coverBmp : fallbackCover();
         if (cover != null) rv.setImageViewBitmap(R.id.n_cover, cover);
 
-        int[] ids = new int[]{R.id.n_l0, R.id.n_l1, R.id.n_l2};
-        for (int i = 0; i < ROWS; i++) {
-            rv.setTextViewText(ids[i], lines[i]);
+        // 歌词行：文字色 + 淡底色都跟随 App 里选的歌词颜色
+        String cur = (CUR_ROW < lines.length && lines[CUR_ROW] != null && !lines[CUR_ROW].trim().isEmpty())
+                ? lines[CUR_ROW] : "";
+        rv.setTextViewText(R.id.n_lyric, cur.isEmpty() ? "♪" : cur);
+        rv.setTextColor(R.id.n_lyric, color);
+        rv.setInt(R.id.n_lyric, "setBackgroundColor", (color & 0x00FFFFFF) | 0x2E000000);
+
+        // 进度条 + 两端时间（数据来自网页每 2 秒上报的 pos/dur）
+        int pct = 0;
+        if (durationMs > 0) {
+            pct = (int) Math.max(0, Math.min(1000, positionMs * 1000 / durationMs));
         }
-        // 当前句（正中间那行）：用布局里固定的绿色，全空时给个音符占位
-        boolean empty = true;
-        for (String s : lines) {
-            if (s != null && !s.trim().isEmpty()) {
-                empty = false;
-                break;
-            }
-        }
-        rv.setTextViewText(ids[CUR_ROW], empty ? "♪" : lines[CUR_ROW]);
+        rv.setProgressBar(R.id.n_prog, 1000, pct, false);
+        rv.setTextViewText(R.id.n_cur, clock(positionMs));
+        rv.setTextViewText(R.id.n_dur, durationMs > 0 ? clock(durationMs) : "--:--");
+        rv.setOnClickPendingIntent(R.id.n_prog, openAppIntent());
+        rv.setOnClickPendingIntent(R.id.n_back10, mediaKeyIntent(NOTIFY_ID * 10 + 5, KEY_BACK10));
+        rv.setOnClickPendingIntent(R.id.n_fwd10, mediaKeyIntent(NOTIFY_ID * 10 + 6, KEY_FWD10));
 
         // 播放模式键：顺 / 循 / 单 / 随（随机时按钮变蓝）
         rv.setTextViewText(R.id.n_mode, modeLabel());
         rv.setInt(R.id.n_mode, "setBackgroundResource",
                 "shuffle".equals(mode) ? R.drawable.nmode_bg_on : R.drawable.nmode_bg);
 
-        Intent open = new Intent(this, MainActivity.class);
-        open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
-        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
-        PendingIntent pi = PendingIntent.getActivity(this, 0, open, flags);
+        PendingIntent pi = openAppIntent();
         rv.setOnClickPendingIntent(R.id.n_root, pi);
 
         // 上一首 / 播放暂停 / 下一首 / 模式切换：跟耳机线控走同一条路
@@ -354,6 +364,21 @@ public class LyricService extends Service {
                 .setShowWhen(false)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .build();
+    }
+
+    /** 点卡片（或进度条）→ 打开 App，去里面拖进度 */
+    private PendingIntent openAppIntent() {
+        Intent open = new Intent(this, MainActivity.class);
+        open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
+        return PendingIntent.getActivity(this, 1, open, flags);
+    }
+
+    /** 毫秒 → m:ss */
+    private static String clock(long ms) {
+        long sec = Math.max(0, ms) / 1000;
+        return (sec / 60) + ":" + String.format("%02d", sec % 60);
     }
 
     /** 重画通知（歌词换行、封面到位、模式切换都走它） */

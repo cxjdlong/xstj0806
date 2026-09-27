@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 锁屏/通知栏：常规播放器卡片
-     第1行：左封面图 + 右侧 歌名 / 歌手（+ 当前歌词在下面两行滚动）
-     第2行：歌词（上/中/下三行，中间那行是当前句，绿色高亮）
-     第3行：上一首 / 播放暂停 / 下一首 / 播放模式（顺·循·单·随）
-     背板 20% 不透明，锁屏下同样可见 -->
+<!-- 锁屏/通知栏：常规播放器卡片（封面 + 歌名歌手 + 一行歌词 + 进度条 + 控制键）
+     歌词行的文字颜色/底色跟随 App 里选定的歌词颜色（代码里 setTextColor / setBackgroundColor）。
+     进度条只能显示（RemoteViews 收不到拖动），两头给了 -10s / +10s，点进度条本身会打开 App。 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/n_root"
     android:layout_width="match_parent"
@@ -61,14 +59,78 @@
         </LinearLayout>
     </LinearLayout>
 
-    <TextView android:id="@+id/n_l0" style="@style/NLrcFar"  android:layout_marginTop="10dp" />
-    <TextView android:id="@+id/n_l1" style="@style/NLrcCur"  android:layout_marginTop="7dp" />
-    <TextView android:id="@+id/n_l2" style="@style/NLrcNear" android:layout_marginTop="7dp" />
+    <!-- 一排歌词（当前句）：文字色 + 淡底色都跟随 App 里的歌词颜色 -->
+    <TextView
+        android:id="@+id/n_lyric"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:paddingLeft="8dp"
+        android:paddingRight="8dp"
+        android:paddingTop="5dp"
+        android:paddingBottom="5dp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="#4CD964"
+        android:text="♪" />
 
+    <!-- 进度：-10s ｜ 进度条 ｜ +10s -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/n_back10"
+            style="@style/NSeek"
+            android:text="-10s" />
+
+        <ProgressBar
+            android:id="@+id/n_prog"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginLeft="6dp"
+            android:layout_marginRight="6dp"
+            android:max="1000"
+            android:progress="0"
+            android:progressTint="#2F6FFF"
+            android:progressBackgroundTint="#66FFFFFF" />
+
+        <TextView
+            android:id="@+id/n_fwd10"
+            style="@style/NSeek"
+            android:text="+10s" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/n_cur"
+            style="@style/NTime"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:text="0:00" />
+
+        <TextView
+            android:id="@+id/n_dur"
+            style="@style/NTime"
+            android:text="0:00" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
         android:orientation="horizontal"
         android:gravity="center_vertical">
 

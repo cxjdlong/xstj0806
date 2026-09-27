@@ -1539,6 +1539,8 @@ $('prog').addEventListener('change', () => {
   if (d > 0) audio.currentTime = (parseInt($('prog').value, 10) / 1000) * d;
   SEEKING = false;
   syncLrc(true);
+  POS_AT = 0;                                  // 拖完立刻把新位置同步给锁屏进度条
+  pushPosition(); pushNativeMeta(CURRENT, true);
 });
 let POS_AT = 0;    // 进度上报节流（锁屏/车机进度条）
 audio.ontimeupdate = () => {
@@ -1546,7 +1548,7 @@ audio.ontimeupdate = () => {
   if (!SEEKING) $('prog').value = d ? Math.round((audio.currentTime / d) * 1000) : 0;
   $('cur').textContent = fmtTime(audio.currentTime);
   $('dur').textContent = fmtTime(d);
-  if (Date.now() - POS_AT > 5000) { POS_AT = Date.now(); pushPosition(); pushNativeMeta(CURRENT, true); }
+  if (Date.now() - POS_AT > 2000) { POS_AT = Date.now(); pushPosition(); pushNativeMeta(CURRENT, true); }   // 锁屏进度条要跟得紧一点
 };
 audio.onended = () => { $('playToggle').textContent = '▶'; playNext(1, true); };
 audio.onerror = async () => {
