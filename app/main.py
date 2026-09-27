@@ -766,6 +766,49 @@ def _pick_playlist(items: list[dict], keyword: str) -> dict | None:
     return best
 
 
+# ---------------- 官方榜判定（新歌榜/飙升榜必须挑平台官方榜，别挑网友自建） ----------------
+# 平台官方歌单的创建者名（网易云官方榜的 creator 就是「网易云音乐」）
+_PLATFORM_CREATOR = {
+    "netease": ("网易云音乐", "云音乐官方"),
+    "qq": ("QQ音乐", "腾讯音乐"),
+    "kugou": ("酷狗音乐", "酷狗"),
+    "kuwo": ("酷我音乐", "酷我"),
+    "migu": ("咪咕音乐", "咪咕"),
+    "qianqian": ("千千音乐", "百度音乐"),
+    "joox": ("JOOX",),
+    "apple": ("Apple Music",),
+}
+_SRC_SHORT = {"netease": "网易云", "qq": "QQ音乐", "kugou": "酷狗", "kuwo": "酷我",
+              "migu": "咪咕", "qianqian": "千千", "joox": "JOOX", "apple": "Apple Music"}
+# 官方榜兜底：网易云音乐官方榜单是永久固定 id（实测可直接取到真榜单内容）
+_RANK_FALLBACK = {"新歌榜": ("3779629", "云音乐新歌榜"),
+                  "飙升榜": ("19723756", "云音乐飙升榜")}
+
+
+def _is_official_playlist(pl: dict) -> bool:
+    """创建者必须是平台官方账号本身 → 才算官方榜。
+
+    精确匹配（不用 startswith）：像「QQ音乐银河计划」这种官方运营号的自建合辑
+    名字里带平台名，但不是榜单，放宽就会把 1250 首的“能量歌单”当成新歌榜。
+    """
+    src = (pl.get("source") or "").strip()
+    creator = (pl.get("creator") or "").strip()
+    if not creator:
+        return False
+    if "官方" in creator:
+        return True
+    return creator in _PLATFORM_CREATOR.get(src, ())
+
+
+def _rank_label(pl: dict) -> str:
+    """卡片副标题用：真实榜名（回落时标出，避免标题与内容不符）。"""
+    name = (pl.get("name") or "").strip()
+    src = _SRC_SHORT.get(pl.get("source") or "", "")
+    if name:
+        return name if pl.get("fallback") else f"{src}·{name}"
+    return f"{src}官方榜" if src else "官方榜"
+
+
 @app.get("/api/home")
 async def api_home(source: str = "", provider: str = "music-dl", user: str = Depends(current_user)):
     """首页：每日推荐 + 新歌榜 + {当月}月热门 + 推荐歌单网格（内存缓存 30 分钟）。"""
@@ -786,35 +829,46 @@ async def api_home(source: str = "", provider: str = "music-dl", user: str = Dep
     except Exception:  # noqa: BLE001
         rec = []
 
-    async def _search(kw: str, use_all: bool = True) -> list[dict]:
-        # 榜单类搜索始终跨 4 个推荐源：单个音源（比如网易云）里常常没有“新歌榜”这种歌单
-        ss = list(getattr(p, "RECOMMEND_SOURCES", []) or []) if use_all else srcs
-        try:
-            return await p.playlist_search(kw, ss)
-        except Exception:  # noqa: BLE001
-            return []
+    async def _rank(kw: str) -> dict | None:
+        """官方榜：优先该音源的官方榜（创建者=平台官方）；该音源没有 → 回落网易云官方榜。
 
-    kw_new = "新歌榜"
-    kw_month = f"{month}月热门"
-    got_new, got_month = await asyncio.gather(_search(kw_new), _search(kw_month))
-    if not got_new:
-        got_new = await _search("新歌")
-    if not got_month:
-        got_month = await _search(f"{month}月")
+        不能按歌单名模糊挑：平台上叫「新歌榜」的歌单绝大多数是网友自建（内容与名字无关）。
+        """
+        live = [source] if source else list(getattr(p, "RECOMMEND_SOURCES", []) or [])
+        try:
+            cands = await p.playlist_search(kw, live) or []
+        except Exception:  # noqa: BLE001
+            cands = []
+        pick = next((c for c in cands if _is_official_playlist(c)), None)
+        if pick:
+            pick["official"] = True
+            return pick
+        fb_id, fb_name = _RANK_FALLBACK[kw]
+        cover, total = "", 0
+        try:
+            tracks, total = await p.playlist_tracks("netease", fb_id, 1, fb_name, "")
+            cover = (getattr(tracks[0], "cover", "") or "") if tracks else ""
+        except Exception:  # noqa: BLE001
+            pass
+        return {"source": "netease", "id": fb_id, "name": fb_name, "cover": cover,
+                "trackCount": total, "creator": "网易云音乐", "official": True, "fallback": True}
 
     entries: list[dict] = []
-    daily = _pick_playlist(rec, "每日推荐") or (rec[0] if rec else None)
+    # 1) 官方推荐 = 该音源的平台官方推荐歌单（卡片上写真实歌单名，避免标题与内容不符）
+    daily = rec[0] if rec else None
     if daily:
-        entries.append({"key": "daily", "title": "每日推荐",
-                        "sub": daily.get("creator") or "官方推荐", "playlist": daily})
-    hit_new = _pick_playlist(got_new, kw_new)
-    if hit_new:
+        entries.append({"key": "daily", "title": "官方推荐",
+                        "sub": daily.get("name") or "平台官方推荐", "playlist": daily})
+    # 2) 新歌榜 / 3) 飙升榜 = 官方榜（缺失回落网易云官方榜）
+    rank_new, rank_rise = await asyncio.gather(_rank("新歌榜"), _rank("飙升榜"))
+    if rank_new:
         entries.append({"key": "new", "title": "新歌榜",
-                        "sub": f"{hit_new.get('trackCount') or 0} 首", "playlist": hit_new})
-    hit_month = _pick_playlist(got_month, kw_month)
-    if hit_month:
-        entries.append({"key": "month", "title": f"{month}月热门",
-                        "sub": f"{hit_month.get('trackCount') or 0} 首", "playlist": hit_month})
+                        "sub": f"{_rank_label(rank_new)} · {rank_new.get('trackCount') or 0}首",
+                        "playlist": rank_new})
+    if rank_rise:
+        entries.append({"key": "rise", "title": "飙升榜",
+                        "sub": f"{_rank_label(rank_rise)} · {rank_rise.get('trackCount') or 0}首",
+                        "playlist": rank_rise})
 
     # 推荐歌单网格：只用平台官方推荐（质量稳）；太少才拿「当月热门」搜索结果补位
     grid: list[dict] = []
@@ -829,8 +883,10 @@ async def api_home(source: str = "", provider: str = "music-dl", user: str = Dep
             grid.append(it)
 
     _add(rec)
-    if len(grid) < 16:
-        _add(got_month)
+    if len(grid) < 16:                  # 官方推荐太少时，用官方榜曲目兜底补位
+        for _rk in (rank_new, rank_rise):
+            if _rk and len(grid) < 16:
+                _add([_rk])
 
     data = {"month": month, "entries": entries, "playlists": grid, "cachedAt": int(now)}
     _HOME_CACHE[key] = (now, data)
