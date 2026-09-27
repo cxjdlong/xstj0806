@@ -9,3 +9,5 @@ android/local.properties
 
 # 本地改动前的备份目录（不提交）
 .bak-*/
+__pycache__/
+*.pyc

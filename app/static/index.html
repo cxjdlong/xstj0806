@@ -37,15 +37,28 @@
   .btn.ghost{background:#fff;color:#3a4354;border:1px solid var(--line);font-weight:500}
   .hint{font-size:12.5px;color:#8b93a2;margin-top:14px;line-height:1.6}
   .err{color:#d9484a;font-size:13px;margin-top:10px;min-height:18px}
-  /* ---------- 顶栏 ---------- */
+  /* ---------- 顶栏（方案B：搜索 + ≡ 菜单） ---------- */
   .topbar{position:sticky;top:0;z-index:30;background:rgba(255,255,255,.97);
           backdrop-filter:saturate(160%) blur(10px);
-          padding:calc(8px + env(safe-area-inset-top)) 10px 6px;border-bottom:1px solid var(--line)}
-  .row{display:flex;gap:8px;align-items:center;min-width:0}
-  .searchwrap{flex:1;min-width:0;position:relative}
-  .searchwrap input{padding-right:38px;background:#fff}
-  .clear{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:30px;height:30px;
+          padding:calc(8px + env(safe-area-inset-top)) 10px 8px;border-bottom:1px solid var(--line)}
+  .tbrow{display:flex;gap:8px;align-items:center;min-width:0}
+  .searchwrap{flex:1;min-width:0;position:relative;display:flex;align-items:center;gap:8px;
+              background:#fff;border:1px solid var(--line);border-radius:12px;padding:0 12px;height:42px}
+  .searchwrap .sic{flex:0 0 auto;color:var(--fg3);font-size:15px}
+  .searchwrap input{border:0;background:transparent;padding:0 26px 0 0;font-size:15px;color:var(--fg);
+                    outline:none;flex:1;min-width:0;border-radius:0}
+  .searchwrap input:focus{border:0}
+  .clear{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:30px;height:30px;
          border:0;background:transparent;color:#9aa2b1;font-size:18px;line-height:1}
+  .iconbtn{flex:0 0 auto;width:42px;height:42px;border-radius:12px;border:1px solid var(--line);
+           background:#fff;color:#43506a;font-size:17px;display:flex;align-items:center;justify-content:center}
+  .iconbtn.on{background:var(--pri);border-color:var(--pri);color:#fff}
+  /* ≡ 菜单 */
+  .menupop{margin-top:8px;border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}
+  .mitem{display:block;width:100%;text-align:left;border:0;background:#fff;color:#39414f;
+         padding:12px 14px;font-size:13.5px;border-bottom:1px solid var(--line2)}
+  .mitem:last-child{border-bottom:0}
+  .mitem:active{background:#f4f7fc}
   .userchip{flex:0 0 auto;max-width:28vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
             font-size:12px;color:#43506a;background:#f1f4f9;border:1px solid #e2e7f0;
             border-radius:999px;padding:7px 10px}
@@ -54,22 +67,27 @@
   /* ---------- 主体 ---------- */
   #main{flex:1;min-height:0;display:flex;overflow:hidden}
   #home{flex:1;min-width:0;display:flex;overflow:hidden}
-  /* 左栏：音乐源（竖排） */
-  #cats{flex:0 0 86px;width:86px;overflow-y:auto;background:#fff;border-right:1px solid var(--line);
-        padding-bottom:120px;-webkit-overflow-scrolling:touch}
-  #cats .gtitle{font-size:10.5px;color:#9aa2b1;padding:11px 9px 4px;letter-spacing:.5px}
-  #srcList{display:flex;flex-direction:column;gap:6px;padding:4px 7px 0}
-  .srcbtn{border:1px solid var(--line);background:#fff;color:#4b5563;border-radius:9px;
-          padding:8px 4px;font-size:12px;line-height:1.3;text-align:center;word-break:break-all}
-  .srcbtn.on{background:var(--pri-l);border-color:var(--pri);color:var(--pri-d);font-weight:600}
-  /* 右侧内容列：分类网格 → 快捷入口 → 推荐歌单 */
+  /* 左栏：音源下拉 + 横线 + 分类（竖排） */
+  #cats{flex:0 0 104px;width:104px;position:relative;overflow-y:auto;background:#fff;
+        border-right:1px solid var(--line);padding-bottom:120px;-webkit-overflow-scrolling:touch}
+  .srcsel{display:flex;align-items:center;gap:3px;width:100%;border:0;background:#fff;
+          padding:11px 8px 9px;font-size:12px;font-weight:600;color:var(--pri-d);text-align:left}
+  .srcsel .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .srcsel .car{flex:0 0 auto;font-size:9px;color:var(--fg3)}
+  .srclist{position:absolute;left:6px;right:6px;top:42px;z-index:36;background:#fff;
+           border:1px solid var(--line);border-radius:10px;padding:4px;max-height:62vh;overflow:auto;
+           box-shadow:0 10px 26px rgba(16,24,40,.16)}
+  .srcbtn{display:block;width:100%;text-align:left;border:0;background:transparent;color:#4b5563;
+          padding:8px;font-size:12px;border-radius:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .srcbtn.on{background:var(--pri-l);color:var(--pri-d);font-weight:600}
+  .hr{height:1px;background:var(--line);margin:0 8px}
+  #catWrap{padding-bottom:12px}
+  .cgrp{font-size:10.5px;color:var(--fg3);padding:10px 9px 4px;letter-spacing:.5px}
+  .cchip{display:block;width:100%;border:0;background:transparent;color:#4b5563;text-align:left;
+         padding:7px 9px;font-size:12.5px;border-radius:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cchip.on{background:var(--pri-l);color:var(--pri-d);font-weight:600}
+  /* 右侧内容列：快捷入口 → 推荐歌单 */
   #plgrid{flex:1;min-width:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
-  #catWrap{padding:6px 10px 0}
-  .cgsec{font-size:11px;color:#9aa2b1;margin:10px 2px 6px;letter-spacing:.5px}
-  .cgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-  .cchip{border:1px solid var(--line);background:#fff;color:#4b5563;border-radius:9px;
-         padding:9px 6px;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .cchip.on{background:var(--pri-l);border-color:var(--pri);color:var(--pri-d);font-weight:600}
   /* 快捷入口：每日推荐 / 新歌榜 / 当月热门 —— 放在分类网格的第一排位置 */
   #quickRow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:8px 10px 2px}
   .qcard{border:0;border-radius:10px;padding:9px 8px;min-height:66px;text-align:left;color:#fff;
@@ -91,7 +109,6 @@
   #recGrid .pcard .pn{font-size:11.5px;margin-top:5px;line-height:1.3}
   #recGrid .pcard .pm{font-size:10px;margin-top:2px}
   @media (min-width:430px){
-    .cgrid{grid-template-columns:repeat(4,minmax(0,1fr))}
     #recGrid{grid-template-columns:repeat(4,minmax(0,1fr))}
   }
   .pcard{min-width:0;cursor:pointer}
@@ -143,15 +160,15 @@
   .player{position:fixed;left:0;right:0;bottom:0;z-index:40;background:#fff;
           border-top:1px solid var(--line);padding:8px 12px calc(8px + env(safe-area-inset-bottom));
           box-shadow:0 -2px 12px rgba(16,24,40,.06)}
-  .prow{display:flex;align-items:center;gap:8px;min-width:0}
+  .prow{display:flex;align-items:center;gap:6px;min-width:0}
   .prow .info{flex:1;min-width:0}
-  .pbtn{flex:0 0 auto;width:44px;height:44px;border-radius:50%;border:0;background:var(--pri);color:#fff;
+  .pbtn{flex:0 0 auto;width:42px;height:42px;border-radius:50%;border:0;background:var(--pri);color:#fff;
         font-size:17px;display:flex;align-items:center;justify-content:center}
-  .pbtn.sec{background:#eef1f7;color:#3a4354;width:38px;height:38px;font-size:14px}
+  .pbtn.sec{background:#eef1f7;color:#3a4354;width:34px;height:34px;font-size:13px}
   /* 上一首 / 下一首（比主按钮小一号，省出空间给歌名） */
-  .pbtn.nav{background:#eef1f7;color:#3a4354;width:36px;height:36px;font-size:16px}
+  .pbtn.nav{background:#eef1f7;color:#3a4354;width:34px;height:34px;font-size:15px}
   /* 播放模式：顺序 / 列表循环 / 单曲循环 / 随机 */
-  .pbtn.mode{background:#eef1f7;color:#3a4354;width:36px;height:36px;font-size:13px;font-weight:600}
+  .pbtn.mode{background:#eef1f7;color:#3a4354;width:34px;height:34px;font-size:12.5px;font-weight:600}
   .pbtn.mode.shuffle{background:var(--pri-l);color:var(--pri-d)}
   /* 播放进度条：可拖动/点击跳转 */
   input[type=range]{width:100%;height:22px;-webkit-appearance:none;appearance:none;background:transparent;margin-top:5px;display:block;padding:0}
@@ -232,31 +249,36 @@
 <!-- ================= 主界面 ================= -->
 <section id="app" hidden style="flex:1;display:flex;flex-direction:column;min-height:100vh;min-height:100dvh">
   <div class="topbar">
-    <div class="row">
+    <div class="tbrow">
       <div class="searchwrap">
+        <span class="sic">🔍</span>
         <input id="q" type="search" placeholder="搜歌名 / 歌手" enterkeyhint="search" autocomplete="off">
         <button class="clear" id="clearBtn" hidden>×</button>
       </div>
-      <button class="userchip" id="searchBtn" title="搜索">搜索</button>
-      <button class="userchip" id="userChip" title="点两下退出登录">—</button>
+      <button class="iconbtn" id="menuBtn" title="更多">≡</button>
     </div>
-    <div class="funcbar">
-      <button class="userchip fnos-only" id="libBtn" title="歌曲库管理">歌曲库管理</button>
-      <button class="userchip" id="plBtn" title="我的歌单">歌单</button>
+    <!-- 方案B：功能收进 ≡ 菜单 -->
+    <div class="menupop" id="homeMenu" hidden>
+      <button class="mitem" id="plBtn">🎵 我的歌单</button>
+      <button class="mitem fnos-only" id="libBtn">🎬 歌曲库管理</button>
+      <button class="mitem" id="userChip" title="点两下退出登录">👤 —</button>
     </div>
   </div>
 
   <div id="main">
     <div id="home">
-      <!-- 左栏：音乐源（原顶部的横排音源标签挪到这里竖排） -->
+      <!-- 左栏：音源下拉 + 横线 + 分类（语种/场景在前） -->
       <aside id="cats">
-        <div class="gtitle">音乐源</div>
-        <div id="srcList"></div>
+        <button class="srcsel" id="srcSel" title="切换音乐源">
+          <span class="nm">—</span><span class="car">▼</span>
+        </button>
+        <div id="srcList" class="srclist" hidden></div>
+        <div class="hr"></div>
+        <div id="catWrap"></div>
       </aside>
-      <!-- 右侧内容：快捷入口（占分类第一排）→ 分类网格（每排 3~4 个，不含“全部”）→ 推荐歌单 -->
+      <!-- 右侧：快捷入口 → 推荐歌单 -->
       <div id="plgrid">
         <div id="quickRow" hidden></div>
-        <div id="catWrap"></div>
         <div id="recHead" class="sect">
           <span id="recTitle">推荐歌单</span>
           <button class="mini" id="recBack" hidden>返回推荐</button>
@@ -623,7 +645,7 @@ async function boot() {
   document.body.classList.toggle('local-mode', !!ME.isLocal);
   paintColorBar();
   showApp();
-  $('userChip').textContent = ME.username;
+  $('userChip').textContent = '👤 ' + ME.username;
   fillPlSelect(); renderPlaylists();
   fillPlistSel(); loadQueue();
   loadTasks();
@@ -634,7 +656,7 @@ async function boot() {
 
 /* ---------------- 分类 + 首页（左：音乐源 / 右：分类网格 + 快捷入口 + 推荐歌单） ---------------- */
 async function loadCategories() {
-  $('srcList').innerHTML = '<div class="gtitle">加载中…</div>';
+  $('srcSel').querySelector('.nm').textContent = '加载中…';
   try {
     CATS = await api('/api/categories');
   } catch (e) {
@@ -648,34 +670,67 @@ async function loadCategories() {
   loadHome();                       // 首页默认展示推荐歌单（不再自动进第一个分类）
 }
 
-/* 左栏：音乐源竖排 */
+/* 左栏：音源下拉（点名字展开，选完收起） */
 function renderSourceTabs() {
+  const cur = (CATS.sources || []).find(s => s.id === CUR_SRC) || {};
+  $('srcSel').querySelector('.nm').textContent = cur.name || '音乐源';
   $('srcList').innerHTML = (CATS.sources || []).map(s =>
     `<button class="srcbtn${s.id === CUR_SRC ? ' on' : ''}" data-src="${esc(s.id)}">${esc(s.name)}</button>`).join('');
   document.querySelectorAll('#srcList .srcbtn').forEach(b => {
-    b.onclick = () => {
+    b.onclick = (e) => {
+      e.stopPropagation();
       CUR_SRC = b.dataset.src;
       CUR_CAT = null;
+      $('srcList').hidden = true;
       renderSourceTabs(); renderCats();
       loadHome();                   // 换音源 → 首页推荐跟着换
     };
   });
 }
+$('srcSel').onclick = (e) => {
+  e.stopPropagation();
+  $('srcList').hidden = !$('srcList').hidden;
+};
 
-/* 右栏顶部：分类网格（按分组分节，每排 3~4 个；“全部”不显示——它没意义） */
+/* ≡ 菜单（我的歌单 / 歌曲库管理 / 账号） */
+$('menuBtn').onclick = (e) => {
+  e.stopPropagation();
+  const m = $('homeMenu');
+  m.hidden = !m.hidden;
+  $('menuBtn').classList.toggle('on', !m.hidden);
+};
+$('homeMenu').addEventListener('click', () => {
+  $('homeMenu').hidden = true; $('menuBtn').classList.remove('on');
+});
+/* 点空白处收起下拉/菜单 */
+document.addEventListener('click', () => {
+  const l = $('srcList'); if (l && !l.hidden) l.hidden = true;
+  const m = $('homeMenu');
+  if (m && !m.hidden) { m.hidden = true; $('menuBtn').classList.remove('on'); }
+});
+
+/* 左栏分类：竖排；语种/场景排最前（“全部”不显示——没意义） */
+const CAT_FIRST = ['语种', '语言', '场景'];
 function renderCats() {
   const groups = (CATS.groups[CUR_SRC] || [])
     .map(g => ({
       title: g.title,
       items: (g.items || []).filter(c => (c.name || '').trim() !== '全部' && (c.id || '').trim() !== '全部'),
     }))
-    .filter(g => g.items.length);
-  const html = groups.map(g =>
-    `<div class="cgsec">${esc(g.title)}</div><div class="cgrid">` +
-    g.items.map(c => `<button class="cchip" data-name="${esc(c.name)}" data-id="${esc(c.id)}" data-src="${esc(c.source || CUR_SRC)}">${esc(c.name)}</button>`).join('') +
-    '</div>'
-  ).join('');
-  $('catWrap').innerHTML = html || '<div class="empty">该音源暂无分类</div>';
+    .filter(g => g.items.length)
+    .sort((a, b) => {
+      const ia = CAT_FIRST.indexOf(a.title), ib = CAT_FIRST.indexOf(b.title);
+      if (ia < 0 && ib < 0) return 0;
+      if (ia < 0) return 1;
+      if (ib < 0) return -1;
+      return ia - ib;
+    });
+  const chip = (c) => `<button class="cchip" data-name="${esc(c.name)}" data-id="${esc(c.id)}" data-src="${esc(c.source || CUR_SRC)}">${esc(c.name)}</button>`;
+  $('catWrap').innerHTML = groups.map(g => {
+    // 该分组只有一个项、且项名就是分组名（酷狗的“语言/场景/专区…”）→ 不重复显示标题
+    const solo = g.items.length === 1 && (g.items[0].name || '').trim() === (g.title || '').trim();
+    return (solo ? '' : `<div class="cgrp">${esc(g.title)}</div>`) + g.items.map(chip).join('');
+  }).join('') || '<div class="cgrp">该音源暂无分类</div>';
   document.querySelectorAll('#catWrap .cchip').forEach(el => {
     el.onclick = () => selectCategory({ name: el.dataset.name, id: el.dataset.id, source: el.dataset.src });
   });

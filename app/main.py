@@ -1661,6 +1661,22 @@ async def index():
     )
 
 
+@app.get("/preview")
+async def preview_page():
+    """新版首页效果预览页（给用户手机上看的静态稿，不需要登录）"""
+    f = STATIC_DIR / "preview.html"
+    if not f.exists():
+        raise HTTPException(status_code=404, detail="no preview")
+    return FileResponse(
+        f,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
+
+
 @app.get("/favicon.ico")
 async def favicon():
     f = STATIC_DIR / "favicon.ico"
