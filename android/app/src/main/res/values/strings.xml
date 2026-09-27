@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">NAS歌下载</string>
     <string name="notify_channel">播放控制</string>
+    <string name="notify_channel_media">播放控制（可拖进度）</string>
 </resources>

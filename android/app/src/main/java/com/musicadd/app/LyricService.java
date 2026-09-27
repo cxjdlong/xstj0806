@@ -52,6 +52,9 @@ public class LyricService extends Service {
 
     private static final String CHANNEL_ID = "musicadd_play";
     private static final int NOTIFY_ID = 1001;
+    /** 系统媒体卡片（MediaStyle + MediaSession）：锁屏/通知栏上那条**可拖进度**的播放器 */
+    private static final String CHANNEL_ID_MEDIA = "musicadd_media";
+    private static final int NOTIFY_ID_MEDIA = 1002;
     /** 网页一次推 3 行（上 1 + 当前句 + 下 1），锁屏卡片只显示中间那一行（当前句） */
     private static final int ROWS = 3;
     private static final int CUR_ROW = 1;
@@ -243,6 +246,11 @@ public class LyricService extends Service {
             String action = intent.getAction();
             if (ACTION_STOP.equals(action)) {
                 try {
+                    NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                    if (nm != null) nm.cancel(NOTIFY_ID_MEDIA);
+                } catch (Exception ignored) {
+                }
+                try {
                     stopForeground(true);
                 } catch (Exception ignored) {
                 }
@@ -319,6 +327,7 @@ public class LyricService extends Service {
             // 没给通知权限等情况：不让服务崩掉
         }
         pushSession();
+        refreshNotification();       // 同时刷新系统媒体卡片（可拖进度那条）
         return START_STICKY;
     }
 
@@ -331,7 +340,59 @@ public class LyricService extends Service {
             ch.setShowBadge(false);
             ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
             nm.createNotificationChannel(ch);
+
+            // 媒体渠道：系统会把它渲染成“媒体播放器卡片”，进度条由系统绘制 → 可以拖动
+            NotificationChannel mc = new NotificationChannel(
+                    CHANNEL_ID_MEDIA, getString(R.string.notify_channel_media),
+                    NotificationManager.IMPORTANCE_LOW);
+            mc.setShowBadge(false);
+            mc.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+            nm.createNotificationChannel(mc);
         }
+    }
+
+    private Notification.Action notifAction(int iconRes, String label, int reqCode, int keyCode) {
+        return new Notification.Action.Builder(
+                android.graphics.drawable.Icon.createWithResource(this, iconRes),
+                label, mediaKeyIntent(reqCode, keyCode)).build();
+    }
+
+    /**
+     * 系统媒体卡片：MediaStyle + 我们的 MediaSession。
+     * 系统（Android 13+ 尤其明显）会把它画成自带**可拖动进度条**的播放器卡片，
+     * 拖动会回调 MediaSession.Callback.onSeekTo → 再转给网页 seek。
+     * 它不显示歌词 —— 歌词仍由我们自己的卡片负责。
+     */
+    private Notification buildMediaNotification() {
+        Notification.MediaStyle style = new Notification.MediaStyle()
+                .setMediaSession(session == null ? null : session.getSessionToken())
+                .setShowActionsInCompactView(0, 1, 2);
+
+        Notification.Builder b;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            b = new Notification.Builder(this, CHANNEL_ID_MEDIA);
+        } else {
+            b = new Notification.Builder(this);
+        }
+        b = b.setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle(title.isEmpty() ? getString(R.string.app_name) : title)
+                .setContentText(artist)
+                .setStyle(style)
+                .setVisibility(Notification.VISIBILITY_PUBLIC)
+                .setOngoing(playing)
+                .setContentIntent(openAppIntent(4));
+
+        if (coverBmp != null) b.setLargeIcon(coverBmp);
+
+        b.addAction(notifAction(android.R.drawable.ic_media_previous, "上一首",
+                NOTIFY_ID_MEDIA * 10 + 1, android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS));
+        b.addAction(notifAction(playing ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play,
+                playing ? "暂停" : "播放",
+                NOTIFY_ID_MEDIA * 10 + 2, android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE));
+        b.addAction(notifAction(android.R.drawable.ic_media_next, "下一首",
+                NOTIFY_ID_MEDIA * 10 + 3, android.view.KeyEvent.KEYCODE_MEDIA_NEXT));
+
+        return b.build();
     }
 
     private Notification build() {
@@ -363,8 +424,9 @@ public class LyricService extends Service {
         rv.setProgressBar(R.id.n_prog, 1000, pct, false);
         rv.setTextViewText(R.id.n_cur, clock(positionMs));                       // 进度条左边 = 当前时间
         rv.setTextViewText(R.id.n_dur, durationMs > 0 ? clock(durationMs) : "--:--");   // 右边 = 总时长
-        // 整张卡片不绑点击（避免误触就打开 App）；只有进度条和右下角「打开」进 App
-        rv.setOnClickPendingIntent(R.id.n_prog, openAppIntent(2));
+        // 整张卡片和进度条都不绑点击（避免误触打开 App）；只有右下角「打开」进 App。
+        // 想拖进度 → 用上面那条系统媒体卡片（MediaStyle，进度条是系统画的，可拖）
+        rv.setOnClickPendingIntent(R.id.n_prog, null);
         rv.setOnClickPendingIntent(R.id.n_open, openAppIntent(3));
 
         // 歌手右侧：有异常提示就显示提示（橙红）→ 否则加载中就显示“加载 NN%” → 否则显示歌曲源
@@ -425,10 +487,22 @@ public class LyricService extends Service {
         return (sec / 60) + ":" + String.format("%02d", sec % 60);
     }
 
-    /** 重画通知（歌词换行、封面到位、模式切换都走它） */
+    private String mediaSig = "";
+
+    /** 重画通知（歌词换行、封面到位、模式切换、播放状态都走它） */
     private void refreshNotification() {
         try {
-            startForeground(NOTIFY_ID, build());
+            startForeground(NOTIFY_ID, build());          // 歌词卡片（前台服务通知）
+        } catch (Exception ignored) {
+        }
+        try {
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null && session != null) {
+                // 系统媒体卡片：只有关键字段变了才重发（进度条由 PlaybackState 驱动，不用重画）
+                String sig = title + "|" + artist + "|" + playing + "|" + coverUrl + "|" + (coverBmp != null);
+                mediaSig = sig;
+                nm.notify(NOTIFY_ID_MEDIA, buildMediaNotification());
+            }
         } catch (Exception ignored) {
         }
     }
