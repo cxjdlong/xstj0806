@@ -133,6 +133,10 @@
   .pcard .pn{font-size:12.5px;margin-top:6px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;
              -webkit-box-orient:vertical;overflow:hidden;word-break:break-all}
   .pcard .pm{font-size:10.5px;color:#8b93a2;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* 卡片上的歌单介绍：自动换行，最多 2 行，超出截断 */
+  .pcard .pd{font-size:10px;color:#98a0ae;margin-top:3px;line-height:1.3;
+             white-space:normal;word-break:break-word;
+             display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   /* ---------- 曲目列表视图 ---------- */
   #listing{flex:1;min-width:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-bottom:132px}
   .lhead{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.97);backdrop-filter:blur(8px);
@@ -140,7 +144,10 @@
   .back{flex:0 0 auto;border:0;background:#eef1f7;color:#3a4354;border-radius:8px;padding:6px 11px;font-size:13px}
   .lhead .info{flex:1;min-width:0}
   .lhead .title{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .lhead .sub{font-size:11.5px;color:#8b93a2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* 歌单介绍：自动换行，最多 2 行，超出直接截断不显示 */
+  .lhead .sub{font-size:11.5px;color:#8b93a2;line-height:1.32;
+              white-space:normal;word-break:break-word;
+              display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .item{display:flex;align-items:center;gap:10px;padding:11px 12px;border-bottom:1px solid var(--line2);min-width:0}
   .item:active{background:#f4f7fc}
   .info{flex:1 1 auto;min-width:0}
@@ -856,6 +863,7 @@ function renderPlGrid(showMore) {
       <img src="${esc(p.cover || '')}" loading="lazy" alt="">
       <div class="pn">${esc(p.name || '未命名歌单')}</div>
       <div class="pm">${p.trackCount ? p.trackCount + ' 首' : ''}${p.creator ? ' · ' + esc(p.creator) : ''}</div>
+      ${(p.description || '').trim() ? `<div class="pd">${esc(p.description)}</div>` : ''}
     </div>`).join('');
   const more = showMore && PL_CACHE.length >= 100
     ? '<button class="more" id="moreBtn" style="grid-column:1/-1">加载更多</button>' : '';
@@ -876,9 +884,10 @@ async function openPlaylist(p) {
     source: p.source, id: p.id, name: p.name || '歌单', cover: p.cover || '',
     total: p.trackCount || 0, page: 1,
   };
-  // 顶栏：返回 + [▶ 播放歌单]；歌单名不再显示
-  showListing('', '', [], {
-    hideTitle: true,
+  // 顶栏：返回 + [▶ 播放歌单] + 歌单名/歌单介绍（介绍最多 2 行，超出截断）
+  const plSub = (p.description || '').trim()
+    || [(p.trackCount ? p.trackCount + ' 首' : ''), (p.creator || '')].filter(Boolean).join(' · ');
+  showListing(CUR_PL.name, plSub, [], {
     actions: [{ id: 'playPlBtn', label: '▶ 播放歌单', fn: () => playWholePlaylist() }],
   });
   await loadPlaylistPage(1);
