@@ -70,13 +70,15 @@
   .cchip{border:1px solid var(--line);background:#fff;color:#4b5563;border-radius:9px;
          padding:9px 6px;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cchip.on{background:var(--pri-l);border-color:var(--pri);color:var(--pri-d);font-weight:600}
-  /* 快捷入口：每日推荐 / 新歌榜 / 当月热门 */
-  #quickRow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;padding:12px 10px 0}
-  .qcard{border:0;border-radius:12px;padding:10px 9px;min-height:70px;text-align:left;color:#fff;
+  /* 快捷入口：每日推荐 / 新歌榜 / 当月热门 —— 放在分类网格的第一排位置 */
+  #quickRow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:8px 10px 2px}
+  .qcard{border:0;border-radius:10px;padding:9px 8px;min-height:66px;text-align:left;color:#fff;
          display:flex;flex-direction:column;justify-content:space-between;min-width:0;
          box-shadow:0 4px 12px rgba(16,24,40,.10)}
-  .qcard .qt{font-size:14px;font-weight:700;line-height:1.2}
-  .qcard .qs{font-size:10.5px;opacity:.92;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .qcard .qt{font-size:13.5px;font-weight:700;line-height:1.2}
+  .qcard .qs{font-size:10px;opacity:.92;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .qcard.qloading{background:#eaeef5;color:#98a0ae;font-size:12px;align-items:center;
+                  justify-content:center;box-shadow:none}
   .qcard.q0{background:linear-gradient(135deg,#4c8dff,#2f6fff)}
   .qcard.q1{background:linear-gradient(135deg,#ff9a5a,#f2683c)}
   .qcard.q2{background:linear-gradient(135deg,#a86bff,#7b3ff2)}
@@ -251,10 +253,10 @@
         <div class="gtitle">音乐源</div>
         <div id="srcList"></div>
       </aside>
-      <!-- 右侧内容：分类网格（每排 3~4 个）→ 快捷入口 → 推荐歌单 -->
+      <!-- 右侧内容：快捷入口（占分类第一排）→ 分类网格（每排 3~4 个，不含“全部”）→ 推荐歌单 -->
       <div id="plgrid">
-        <div id="catWrap"></div>
         <div id="quickRow" hidden></div>
+        <div id="catWrap"></div>
         <div id="recHead" class="sect">
           <span id="recTitle">推荐歌单</span>
           <button class="mini" id="recBack" hidden>返回推荐</button>
@@ -660,9 +662,14 @@ function renderSourceTabs() {
   });
 }
 
-/* 右栏顶部：分类网格（按分组分节，每排 3~4 个） */
+/* 右栏顶部：分类网格（按分组分节，每排 3~4 个；“全部”不显示——它没意义） */
 function renderCats() {
-  const groups = CATS.groups[CUR_SRC] || [];
+  const groups = (CATS.groups[CUR_SRC] || [])
+    .map(g => ({
+      title: g.title,
+      items: (g.items || []).filter(c => (c.name || '').trim() !== '全部' && (c.id || '').trim() !== '全部'),
+    }))
+    .filter(g => g.items.length);
   const html = groups.map(g =>
     `<div class="cgsec">${esc(g.title)}</div><div class="cgrid">` +
     g.items.map(c => `<button class="cchip" data-name="${esc(c.name)}" data-id="${esc(c.id)}" data-src="${esc(c.source || CUR_SRC)}">${esc(c.name)}</button>`).join('') +
@@ -686,7 +693,7 @@ let HOME_REC = [];
 async function loadHome() {
   $('recTitle').textContent = '推荐歌单';
   $('recBack').hidden = true;
-  $('quickRow').hidden = true;
+  renderQuickLoading();               // 先占住第一排，别让分类跳上去
   $('recGrid').innerHTML = '<div class="empty" style="grid-column:1/-1">加载中…</div>';
   try {
     const d = await api('/api/home' + (CUR_SRC ? '?source=' + q(CUR_SRC) : ''));
@@ -694,8 +701,15 @@ async function loadHome() {
     renderQuick(d.entries || [], d.month);
     renderRecGrid(HOME_REC);
   } catch (e) {
+    $('quickRow').hidden = true;
     $('recGrid').innerHTML = '<div class="empty" style="grid-column:1/-1">' + esc(e.message) + '</div>';
   }
+}
+
+/* 快捷入口的占位（首页数据要打上游，约 10 来秒） */
+function renderQuickLoading() {
+  $('quickRow').innerHTML = '<div class="qcard qloading">加载中…</div>'.repeat(3);
+  $('quickRow').hidden = false;
 }
 
 /* 快捷入口：每日推荐 / 新歌榜 / {当月}月热门（月份由后端按当前日期算） */

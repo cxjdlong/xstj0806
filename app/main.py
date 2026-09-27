@@ -754,15 +754,21 @@ async def api_home(source: str = "", provider: str = "music-dl", user: str = Dep
     except Exception:  # noqa: BLE001
         rec = []
 
-    async def _search(kw: str) -> list[dict]:
+    async def _search(kw: str, use_all: bool = True) -> list[dict]:
+        # 榜单类搜索始终跨 4 个推荐源：单个音源（比如网易云）里常常没有“新歌榜”这种歌单
+        ss = list(getattr(p, "RECOMMEND_SOURCES", []) or []) if use_all else srcs
         try:
-            return await p.playlist_search(kw, srcs)
+            return await p.playlist_search(kw, ss)
         except Exception:  # noqa: BLE001
             return []
 
     kw_new = "新歌榜"
     kw_month = f"{month}月热门"
     got_new, got_month = await asyncio.gather(_search(kw_new), _search(kw_month))
+    if not got_new:
+        got_new = await _search("新歌")
+    if not got_month:
+        got_month = await _search(f"{month}月")
 
     entries: list[dict] = []
     daily = _pick_playlist(rec, "每日推荐") or (rec[0] if rec else None)
