@@ -110,6 +110,16 @@ def local_playlists_brief() -> list[dict]:
     ]
 
 
+# 飞牛音乐自动生成的“在线歌单 / 每日推荐”guid 形如 online:playlist:daily:...：
+# 这类歌单飞牛没有 删除/改名/加歌 接口（调用回 100002 invalid arguments），标记只读，别让用户点了报错。
+READONLY_GUID_PREFIXES = ("online:",)
+READONLY_NOTE = "飞牛音乐的在线/自动歌单，只能查看和播放"
+
+
+def is_readonly_playlist(guid: str) -> bool:
+    return any(str(guid or "").startswith(pref) for pref in READONLY_GUID_PREFIXES)
+
+
 def all_playlists(user: str) -> list[dict]:
     """歌单总表 = 本地歌单 +（有飞牛账号时）该账号的飞牛歌单。"""
     items = local_playlists_brief()
@@ -117,10 +127,19 @@ def all_playlists(user: str) -> list[dict]:
         try:
             for p in fnos.list_playlists(fnos.token_for(user) or ""):
                 p["source"] = "fnos"
+                if is_readonly_playlist(p.get("guid", "")):
+                    p["readonly"] = True
+                    p["readonlyNote"] = READONLY_NOTE
                 items.append(p)
         except FnosMusicError:
             pass
     return items
+
+
+def _reject_readonly(guid: str) -> None:
+    """写操作前拦一下只读歌单，给出人话提示（而不是飞牛那句 invalid arguments）。"""
+    if is_readonly_playlist(guid):
+        raise HTTPException(status_code=400, detail=READONLY_NOTE + "，不能删除/改名/加歌")
 providers.register(providers.MusicDlProvider(MUSICDL_BASE))
 
 # 落雪音乐（可选）：部署好后设 LXMUSIC_BASE 即自动启用
@@ -375,6 +394,11 @@ def _try_add_once(task: Task) -> bool:
     guid = task.playlistGuid
     if not guid:
         return True
+    if is_readonly_playlist(guid):
+        with TASKS_LOCK:
+            task.addStatus, task.addNote = "failed", READONLY_NOTE + "，无法加入"
+        return True
+
     token = fnos.token_for(task.owner)
     if not token:
         with TASKS_LOCK:
@@ -924,9 +948,13 @@ async def download(payload: dict, user: str = Depends(current_user)):
             status_code=400,
             detail="本地歌单不能作为下载目标（下载只写 NAS 曲库并加入飞牛音乐歌单）",
         )
+    if guid and guid != "default":
+        _reject_readonly(guid)
     if guid == "default":
         d = default_playlist_for(user)
         guid, name = d.get("guid"), d.get("name") or ""
+        if guid and is_readonly_playlist(guid):
+            guid, name = "", ""        # 默认歌单是飞牛自动歌单（不能加歌）→ 只下载不入单
     if guid and local_playlist(guid) is not None:
         guid, name = "", ""      # 兜底：历史设置里的本地歌单，不参与下载
     if guid in ("", "none", None):
@@ -979,6 +1007,7 @@ async def set_settings(payload: dict, user: str = Depends(current_user)):
             status_code=400,
             detail="本地歌单不能设为下载默认歌单（它不会下载到 NAS，只保存歌单记录）",
         )
+    _reject_readonly(guid)
     all_s = _load_settings()
     mine = all_s.get(user) or {}
     mine["defaultPlaylist"] = {"guid": guid, "name": name} if guid else None
@@ -1128,6 +1157,8 @@ async def playlist_rename(payload: dict, user: str = Depends(current_user)):
     if any(c in name for c in "\n\r\t"):
         raise HTTPException(status_code=400, detail="歌单名里不能有换行")
 
+    _reject_readonly(guid)
+
     if local_playlist(guid) is not None:      # 本地歌单
         items = _load_local_playlists()
         for p in items:
@@ -1256,6 +1287,7 @@ async def playlist_remove_track(payload: dict, user: str = Depends(current_user)
     guid = (payload.get("guid") or "").strip()
     if not guid:
         raise HTTPException(status_code=400, detail="缺少歌单")
+    _reject_readonly(guid)
 
     # —— 本地歌单：按序号删本地记录 ——
     if local_playlist(guid) is not None:
@@ -1479,6 +1511,8 @@ async def playlist_delete(payload: dict, user: str = Depends(current_user)):
     if is_local(user):
         raise HTTPException(status_code=400, detail="本地模式只能删除本地歌单")
 
+    _reject_readonly(guid)
+
     token = fnos.token_for(user)
     if not token:
         raise HTTPException(status_code=503, detail="该账号还没有飞牛音乐登录令牌")
@@ -1574,6 +1608,8 @@ async def playlist_import_to_fnos(payload: dict, user: str = Depends(current_use
     target_guid = (payload.get("targetGuid") or "").strip()
     new_name = (payload.get("newName") or "").strip()
 
+    _reject_readonly(target_guid)
+
     lp = local_playlist(local_guid)
     if lp is None:
         raise HTTPException(status_code=400, detail="这不是本地歌单")
@@ -1627,6 +1663,7 @@ async def playlist_add(payload: dict, user: str = Depends(current_user)):
     items = payload.get("items") or []
     if not guid or not items:
         raise HTTPException(status_code=400, detail="缺少歌单或曲目")
+    _reject_readonly(guid)
 
     # 本地歌单：只存曲目（不下载、不进飞牛音乐），之后点了就能在线播放
     if local_playlist(guid) is not None:

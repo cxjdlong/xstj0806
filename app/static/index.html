@@ -1134,7 +1134,7 @@ function replayCurrent() {
   audio.play().catch(() => {});
 }
 function fillPlistSel() {
-  const pls = (ME && ME.playlists) || [];
+  const pls = writablePls(ME && ME.playlists);
   const cur = $('plistSel').value;
   $('plistSel').innerHTML = pls.length
     ? pls.map(p => `<option value="${esc(p.guid)}">${esc(p.name)}${p.trackCount ? '（' + p.trackCount + ' 首）' : ''}</option>`).join('')
@@ -1257,7 +1257,7 @@ function openDlSheet() {
 }
 
 function renderDlPl() {
-  const pls = (ME && ME.playlists) || [];
+  const pls = writablePls(ME && ME.playlists);
   $('dlPlList').innerHTML = pls.length
     ? pls.map(p => `<div class="pick-row${p.guid === DL_PICK ? ' on' : ''}" data-guid="${esc(p.guid)}" data-name="${esc(p.name)}">
         <div class="info"><div class="title">${esc(p.name)}</div><div class="sub">${p.trackCount ? p.trackCount + ' 首' : '空歌单'}</div></div>
@@ -1796,14 +1796,18 @@ $('clearTasks').onclick = async () => { await api('/api/tasks/clear', { method: 
 
 /* ---------------- 我的飞牛歌单 ---------------- */
 function fillPlSelect() {
-  // 下载只能进飞牛音乐歌单 —— 本地歌单不参与下载（它只存歌单记录，不写曲库）
-  const pls = ((ME && ME.playlists) || []).filter(p => p.source !== 'local');
+  // 下载只能进飞牛音乐歌单 —— 本地歌单不参与下载；飞牛自动歌单（只读）也不能作目标
+  const pls = writablePls((ME && ME.playlists) || []).filter(p => p.source !== 'local');
   const cur = $('playlistSel').value;
   $('playlistSel').innerHTML = pls.length
     ? pls.map(p => `<option value="${esc(p.guid)}">${esc(p.name)}${p.trackCount ? '（' + p.trackCount + ' 首）' : ''}</option>`).join('')
-    : '<option value="">（没有飞牛歌单，先在顶部「歌单」里建一个并勾选同步）</option>';
+    : '<option value="">（没有可用的飞牛歌单：自动歌单不能加歌，先自己建一个）</option>';
   if (cur) $('playlistSel').value = cur;
 }
+
+/* 飞牛音乐的“在线/自动歌单”（guid 带 online:）是只读的：不能改名/删除/加歌 */
+const plWritable = (p) => !(p && p.readonly);
+const writablePls = (list) => (list || []).filter(plWritable);
 
 function renderPlaylists() {
   const pls = (ME && ME.playlists) || [];
@@ -1814,15 +1818,16 @@ function renderPlaylists() {
         const isLocalPl = p.source === 'local';
         return `<div class="qitem">
           <div class="info">
-            <div class="title" data-open="${esc(p.guid)}" data-name="${esc(p.name)}"><span class="lnk">${esc(p.name)}</span><span class="src-tag ${isLocalPl ? 'local' : 'fnos'}">${isLocalPl ? '本地' : '飞牛'}</span>${isDef ? '<span class="tag">下载默认</span>' : ''}</div>
-            <div class="sub">${p.trackCount ? p.trackCount + ' 首' : '空歌单'}${isLocalPl ? ' · 点名字看曲目并播放' : ' · 飞牛音乐里的歌单'}</div>
+            <div class="title" data-open="${esc(p.guid)}" data-name="${esc(p.name)}"><span class="lnk">${esc(p.name)}</span><span class="src-tag ${isLocalPl ? 'local' : 'fnos'}">${isLocalPl ? '本地' : '飞牛'}</span>${p.readonly ? '<span class="tag">在线·只读</span>' : ''}${isDef ? '<span class="tag">下载默认</span>' : ''}</div>
+            <div class="sub">${p.trackCount ? p.trackCount + ' 首' : '空歌单'}${isLocalPl ? ' · 点名字看曲目并播放'
+              : (p.readonly ? ' · 飞牛自动歌单，只能查看和播放' : ' · 飞牛音乐里的歌单')}</div>
           </div>
           ${isLocalPl && !(ME && ME.isLocal)
             ? `<button class="mini imp" data-guid="${esc(p.guid)}" data-name="${esc(p.name)}">导入飞牛</button>`
             : ''}
-          <button class="mini rn" data-guid="${esc(p.guid)}" data-name="${esc(p.name)}">改名</button>
-          <button class="mini del" data-guid="${esc(p.guid)}" data-name="${esc(p.name)}">删除</button>
-          ${isLocalPl
+          ${p.readonly ? '' : `<button class="mini rn" data-guid="${esc(p.guid)}" data-name="${esc(p.name)}">改名</button>
+          <button class="mini del" data-guid="${esc(p.guid)}" data-name="${esc(p.name)}">删除</button>`}
+          ${(isLocalPl || p.readonly)
             ? ''
             : `<button class="mini def" data-def="${esc(p.guid)}" data-name="${esc(p.name)}" data-on="${isDef ? 1 : 0}">${isDef ? '取消默认' : '设为默认'}</button>`}
         </div>`;
@@ -2047,9 +2052,12 @@ async function openPlTracks(guid, name) {
       $('plTrList').innerHTML = '<div class="hint">' + esc(d.note || '这个歌单还是空的（搜索后点 ＋ 加进来）') + '</div>';
       return;
     }
+    const RO = !!((ME && ME.playlists) || []).find(x => x.guid === guid && x.readonly);
+    PT.readonly = RO;
     $('plTrHint').textContent = d.local
       ? ('共 ' + PT.items.length + ' 首 · 点歌名即可播放')
-      : ('共 ' + PT.items.length + ' 首 · 飞牛音乐歌单');
+      : (RO ? ('共 ' + PT.items.length + ' 首 · 飞牛自动歌单（只读，不能改名/删除/加歌）')
+            : ('共 ' + PT.items.length + ' 首 · 飞牛音乐歌单'));
     $('plTrList').innerHTML = PT.items.map((t, i) => `
       <div class="item">
         <div class="info">
@@ -2057,8 +2065,8 @@ async function openPlTracks(guid, name) {
           <div class="sub">${esc(t.artist || '未知歌手')}${t.duration ? ' · ' + fmtTime(t.duration) : ''}</div>
         </div>
         <button class="pb" ${d.local ? `data-lp="${i}"` : `data-pb="${i}"`} title="播放">▶</button>
-        <button class="mini rmt" data-i="${i}" data-tg="${esc(t.guid || '')}">从歌单删除</button>
-        ${d.local ? '' : `<button class="mini rmd" data-i="${i}">删除</button>`}
+        ${RO ? '' : `<button class="mini rmt" data-i="${i}" data-tg="${esc(t.guid || '')}">从歌单删除</button>`}
+        ${(d.local || RO) ? '' : `<button class="mini rmd" data-i="${i}">删除</button>`}
       </div>`).join('');
     $('plTrList').querySelectorAll('[data-lp]').forEach(el => {
       el.onclick = () => playFromLocal(parseInt(el.dataset.lp, 10));
@@ -2111,8 +2119,9 @@ async function openPlTracks(guid, name) {
         } catch (e) { toast(e.message); btn.disabled = false; }
       };
     });
-    // 删除歌单（飞牛歌单会同步删掉）
+    // 删除歌单（飞牛歌单会同步删掉）；飞牛自动歌单（只读）不能删 → 隐藏按钮
     const delBtn = $('plTrDel');
+    delBtn.hidden = !!PT.readonly;
     delBtn.textContent = PT.local ? '删除这个歌单' : '删除这个歌单（同步飞牛）';
     delBtn.onclick = async () => {
       const tip = PT.local
@@ -2233,7 +2242,7 @@ async function addTrackToPl(guid, name, t) {
 }
 
 function openAddPl(t) {
-  const pls = (ME && ME.playlists) || [];
+  const pls = writablePls(ME && ME.playlists);
   if (!pls.length) { toast('还没有歌单，先点顶部「歌单」新建一个'); return; }
 
   // 只有一个歌单就一步到位
@@ -2272,7 +2281,7 @@ function openImport(guid, name) {
   $('impFrom').textContent = name;
   $('impNew').value = '';
   $('impErr').textContent = '';
-  const pls = ((ME && ME.playlists) || []).filter(p => p.source !== 'local');
+  const pls = writablePls((ME && ME.playlists) || []).filter(p => p.source !== 'local');
   $('impSel').innerHTML = pls.length
     ? pls.map(p => `<option value="${esc(p.guid)}">${esc(p.name)}${p.trackCount ? '（' + p.trackCount + ' 首）' : ''}</option>`).join('')
     : '<option value="">（没有飞牛歌单，请在下面填新歌单名）</option>';
