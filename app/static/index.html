@@ -51,22 +51,47 @@
             border-radius:999px;padding:7px 10px}
   .qprog{height:4px;background:#e7ebf3;border-radius:3px;overflow:hidden;margin-top:5px}
   .qprog > i{display:block;height:100%;background:var(--pri);transition:width .3s}
-  .srctabs{display:flex;gap:6px;overflow-x:auto;margin-top:8px;padding-bottom:2px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
-  .srctabs::-webkit-scrollbar{display:none}
-  .srctab{flex:0 0 auto;font-size:12.5px;color:#5b6474;background:#fff;border:1px solid var(--line);
-          border-radius:999px;padding:5px 11px;white-space:nowrap}
-  .srctab.on{background:var(--pri-l);border-color:var(--pri);color:var(--pri-d);font-weight:600}
   /* ---------- 主体 ---------- */
   #main{flex:1;min-height:0;display:flex;overflow:hidden}
   #home{flex:1;min-width:0;display:flex;overflow:hidden}
-  #cats{flex:0 0 88px;width:88px;overflow-y:auto;background:#fff;border-right:1px solid var(--line);
+  /* 左栏：音乐源（竖排） */
+  #cats{flex:0 0 86px;width:86px;overflow-y:auto;background:#fff;border-right:1px solid var(--line);
         padding-bottom:120px;-webkit-overflow-scrolling:touch}
   #cats .gtitle{font-size:10.5px;color:#9aa2b1;padding:11px 9px 4px;letter-spacing:.5px}
-  #cats .c{padding:9px 9px;font-size:13px;color:#4b5563;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-           border-left:2px solid transparent}
-  #cats .c.on{background:#eef3ff;color:var(--pri);font-weight:600;border-left-color:var(--pri)}
-  #plgrid{flex:1;min-width:0;overflow-y:auto;padding:10px 10px 130px;display:grid;
-          grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 10px;align-content:start;-webkit-overflow-scrolling:touch}
+  #srcList{display:flex;flex-direction:column;gap:6px;padding:4px 7px 0}
+  .srcbtn{border:1px solid var(--line);background:#fff;color:#4b5563;border-radius:9px;
+          padding:8px 4px;font-size:12px;line-height:1.3;text-align:center;word-break:break-all}
+  .srcbtn.on{background:var(--pri-l);border-color:var(--pri);color:var(--pri-d);font-weight:600}
+  /* 右侧内容列：分类网格 → 快捷入口 → 推荐歌单 */
+  #plgrid{flex:1;min-width:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  #catWrap{padding:6px 10px 0}
+  .cgsec{font-size:11px;color:#9aa2b1;margin:10px 2px 6px;letter-spacing:.5px}
+  .cgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .cchip{border:1px solid var(--line);background:#fff;color:#4b5563;border-radius:9px;
+         padding:9px 6px;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cchip.on{background:var(--pri-l);border-color:var(--pri);color:var(--pri-d);font-weight:600}
+  /* 快捷入口：每日推荐 / 新歌榜 / 当月热门 */
+  #quickRow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;padding:12px 10px 0}
+  .qcard{border:0;border-radius:12px;padding:10px 9px;min-height:70px;text-align:left;color:#fff;
+         display:flex;flex-direction:column;justify-content:space-between;min-width:0;
+         box-shadow:0 4px 12px rgba(16,24,40,.10)}
+  .qcard .qt{font-size:14px;font-weight:700;line-height:1.2}
+  .qcard .qs{font-size:10.5px;opacity:.92;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .qcard.q0{background:linear-gradient(135deg,#4c8dff,#2f6fff)}
+  .qcard.q1{background:linear-gradient(135deg,#ff9a5a,#f2683c)}
+  .qcard.q2{background:linear-gradient(135deg,#a86bff,#7b3ff2)}
+  /* 区块标题（推荐歌单 / 分类结果） */
+  .sect{display:flex;align-items:center;gap:8px;padding:14px 12px 6px;font-size:14px;font-weight:600;color:var(--fg)}
+  .sect .mini{margin-left:auto}
+  #recGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px 9px;
+           padding:0 10px 130px;align-content:start}
+  #recGrid .pcard img{border-radius:8px}
+  #recGrid .pcard .pn{font-size:11.5px;margin-top:5px;line-height:1.3}
+  #recGrid .pcard .pm{font-size:10px;margin-top:2px}
+  @media (min-width:430px){
+    .cgrid{grid-template-columns:repeat(4,minmax(0,1fr))}
+    #recGrid{grid-template-columns:repeat(4,minmax(0,1fr))}
+  }
   .pcard{min-width:0;cursor:pointer}
   .pcard img{width:100%;aspect-ratio:1/1;border-radius:10px;object-fit:cover;background:#e9edf4;display:block}
   .pcard .pn{font-size:12.5px;margin-top:6px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;
@@ -217,13 +242,25 @@
       <button class="userchip fnos-only" id="libBtn" title="歌曲库管理">歌曲库管理</button>
       <button class="userchip" id="plBtn" title="我的歌单">歌单</button>
     </div>
-    <div class="srctabs" id="srcTabs"></div>
   </div>
 
   <div id="main">
     <div id="home">
-      <aside id="cats"><div class="gtitle">加载中…</div></aside>
-      <div id="plgrid"><div class="empty">选择左侧分类查看歌单</div></div>
+      <!-- 左栏：音乐源（原顶部的横排音源标签挪到这里竖排） -->
+      <aside id="cats">
+        <div class="gtitle">音乐源</div>
+        <div id="srcList"></div>
+      </aside>
+      <!-- 右侧内容：分类网格（每排 3~4 个）→ 快捷入口 → 推荐歌单 -->
+      <div id="plgrid">
+        <div id="catWrap"></div>
+        <div id="quickRow" hidden></div>
+        <div id="recHead" class="sect">
+          <span id="recTitle">推荐歌单</span>
+          <button class="mini" id="recBack" hidden>返回推荐</button>
+        </div>
+        <div id="recGrid"><div class="empty">加载中…</div></div>
+      </div>
     </div>
     <div id="listing" hidden></div>
   </div>
@@ -593,70 +630,131 @@ async function boot() {
   loadCategories();
 }
 
-/* ---------------- 分类 + 歌单墙 ---------------- */
+/* ---------------- 分类 + 首页（左：音乐源 / 右：分类网格 + 快捷入口 + 推荐歌单） ---------------- */
 async function loadCategories() {
-  $('cats').innerHTML = '<div class="gtitle">加载中…</div>';
+  $('srcList').innerHTML = '<div class="gtitle">加载中…</div>';
   try {
     CATS = await api('/api/categories');
   } catch (e) {
-    $('cats').innerHTML = '<div class="gtitle">分类加载失败</div>';
-    $('plgrid').innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+    $('catWrap').innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+    $('recGrid').innerHTML = '';
     return;
   }
   CUR_SRC = (CATS.sources[0] || {}).id || '';
   renderSourceTabs();
   renderCats();
-  const firstGroup = (CATS.groups[CUR_SRC] || [])[0];
-  const firstCat = firstGroup ? firstGroup.items[0] : { name: '全部', id: '全部' };
-  selectCategory(firstCat);
+  loadHome();                       // 首页默认展示推荐歌单（不再自动进第一个分类）
 }
 
+/* 左栏：音乐源竖排 */
 function renderSourceTabs() {
-  $('srcTabs').innerHTML = (CATS.sources || []).map(s =>
-    `<button class="srctab${s.id === CUR_SRC ? ' on' : ''}" data-src="${esc(s.id)}">${esc(s.name)}</button>`).join('');
-  document.querySelectorAll('#srcTabs .srctab').forEach(b => {
+  $('srcList').innerHTML = (CATS.sources || []).map(s =>
+    `<button class="srcbtn${s.id === CUR_SRC ? ' on' : ''}" data-src="${esc(s.id)}">${esc(s.name)}</button>`).join('');
+  document.querySelectorAll('#srcList .srcbtn').forEach(b => {
     b.onclick = () => {
       CUR_SRC = b.dataset.src;
+      CUR_CAT = null;
       renderSourceTabs(); renderCats();
-      const g = (CATS.groups[CUR_SRC] || [])[0];
-      selectCategory(g ? g.items[0] : { name: '全部', id: '全部' });
+      loadHome();                   // 换音源 → 首页推荐跟着换
     };
   });
 }
 
+/* 右栏顶部：分类网格（按分组分节，每排 3~4 个） */
 function renderCats() {
   const groups = CATS.groups[CUR_SRC] || [];
   const html = groups.map(g =>
-    `<div class="gtitle">${esc(g.title)}</div>` +
-    g.items.map(c => `<div class="c${CUR_CAT && CUR_CAT.name === c.name ? ' on' : ''}" data-name="${esc(c.name)}" data-id="${esc(c.id)}" data-src="${esc(c.source || CUR_SRC)}">${esc(c.name)}</div>`).join('')
+    `<div class="cgsec">${esc(g.title)}</div><div class="cgrid">` +
+    g.items.map(c => `<button class="cchip" data-name="${esc(c.name)}" data-id="${esc(c.id)}" data-src="${esc(c.source || CUR_SRC)}">${esc(c.name)}</button>`).join('') +
+    '</div>'
   ).join('');
-  $('cats').innerHTML = html || '<div class="gtitle">该源暂无分类</div>';
-  document.querySelectorAll('#cats .c').forEach(el => {
+  $('catWrap').innerHTML = html || '<div class="empty">该音源暂无分类</div>';
+  document.querySelectorAll('#catWrap .cchip').forEach(el => {
     el.onclick = () => selectCategory({ name: el.dataset.name, id: el.dataset.id, source: el.dataset.src });
   });
 }
 
 function selectCategory(cat) {
   CUR_CAT = cat;
-  document.querySelectorAll('#cats .c').forEach(el => el.classList.toggle('on', el.dataset.name === cat.name));
+  document.querySelectorAll('#catWrap .cchip').forEach(el => el.classList.toggle('on', el.dataset.name === cat.name));
   loadPlaylists(cat, 1);
 }
 
+/* ---------------- 首页聚合：每日推荐 / 新歌榜 / 当月热门 / 推荐歌单 ---------------- */
+let HOME_REC = [];
+
+async function loadHome() {
+  $('recTitle').textContent = '推荐歌单';
+  $('recBack').hidden = true;
+  $('quickRow').hidden = true;
+  $('recGrid').innerHTML = '<div class="empty" style="grid-column:1/-1">加载中…</div>';
+  try {
+    const d = await api('/api/home' + (CUR_SRC ? '?source=' + q(CUR_SRC) : ''));
+    HOME_REC = d.playlists || [];
+    renderQuick(d.entries || [], d.month);
+    renderRecGrid(HOME_REC);
+  } catch (e) {
+    $('recGrid').innerHTML = '<div class="empty" style="grid-column:1/-1">' + esc(e.message) + '</div>';
+  }
+}
+
+/* 快捷入口：每日推荐 / 新歌榜 / {当月}月热门（月份由后端按当前日期算） */
+function renderQuick(entries, month) {
+  if (!entries.length) { $('quickRow').hidden = true; return; }
+  $('quickRow').innerHTML = entries.map((e, i) => `
+    <button class="qcard q${i % 3}" data-i="${i}">
+      <span class="qt">${esc(e.title || '')}</span>
+      <span class="qs">${esc(e.sub || '')}</span>
+    </button>`).join('');
+  $('quickRow').hidden = false;
+  $('quickRow').querySelectorAll('.qcard').forEach(b => {
+    b.onclick = () => {
+      const p = (entries[+b.dataset.i] || {}).playlist;
+      if (p) openPlaylist(p);
+    };
+  });
+}
+
+/* 推荐歌单网格（3~4 列，图片比原来的 2 列小约三分之一） */
+function renderRecGrid(items) {
+  const cards = (items || []).map((p, i) => `
+    <div class="pcard" data-i="${i}">
+      <img src="${esc(p.cover || '')}" loading="lazy" alt="">
+      <div class="pn">${esc(p.name || '未命名歌单')}</div>
+      <div class="pm">${p.trackCount ? p.trackCount + ' 首' : ''}</div>
+    </div>`).join('');
+  $('recGrid').innerHTML = cards || '<div class="empty" style="grid-column:1/-1">暂时没有推荐</div>';
+  $('recGrid').querySelectorAll('.pcard').forEach(el => {
+    el.onclick = () => openPlaylist(items[+el.dataset.i]);
+  });
+}
+
+$('recBack') && ($('recBack').onclick = () => {
+  CUR_CAT = null;
+  document.querySelectorAll('#catWrap .cchip').forEach(el => el.classList.remove('on'));
+  $('recTitle').textContent = '推荐歌单';
+  $('recBack').hidden = true;
+  if (HOME_REC.length) renderRecGrid(HOME_REC); else loadHome();
+});
+
+/* ---------------- 分类歌单（结果替换下方网格，可返回推荐） ---------------- */
 async function loadPlaylists(cat, page) {
   showHome();
   PL_PAGE = page; PL_CTX = cat;
-  if (page === 1) { PL_CACHE = []; $('plgrid').innerHTML = '<div class="empty">加载中…</div>'; }
+  $('recTitle').textContent = '分类 · ' + (cat.name || '');
+  $('recBack').hidden = false;
+  if (page === 1) { PL_CACHE = []; $('recGrid').innerHTML = '<div class="empty" style="grid-column:1/-1">加载中…</div>'; }
   try {
     const d = await api(`/api/category?source=${q(cat.source || CUR_SRC)}&categoryId=${q(cat.id)}&categoryName=${q(cat.name)}&page=${page}`);
     PL_CACHE = page === 1 ? d.items : PL_CACHE.concat(d.items);
     renderPlGrid(true);
   } catch (e) {
-    $('plgrid').innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+    $('recGrid').innerHTML = '<div class="empty" style="grid-column:1/-1">' + esc(e.message) + '</div>';
   }
 }
 
 function renderPlGrid(showMore) {
-  if (!PL_CACHE.length) { $('plgrid').innerHTML = '<div class="empty">这个分类下没有歌单</div>'; return; }
+  if (!PL_CACHE.length) { $('recGrid').innerHTML = '<div class="empty" style="grid-column:1/-1">这个分类下没有歌单</div>'; return; }
   const cards = PL_CACHE.map((p, i) => `
     <div class="pcard" data-i="${i}">
       <img src="${esc(p.cover || '')}" loading="lazy" alt="">
@@ -664,9 +762,9 @@ function renderPlGrid(showMore) {
       <div class="pm">${p.trackCount ? p.trackCount + ' 首' : ''}${p.creator ? ' · ' + esc(p.creator) : ''}</div>
     </div>`).join('');
   const more = showMore && PL_CACHE.length >= 100
-    ? `<button class="more" id="moreBtn">加载更多</button>` : '';
-  $('plgrid').innerHTML = cards + more;
-  document.querySelectorAll('#plgrid .pcard').forEach(el => {
+    ? '<button class="more" id="moreBtn" style="grid-column:1/-1">加载更多</button>' : '';
+  $('recGrid').innerHTML = cards + more;
+  document.querySelectorAll('#recGrid .pcard').forEach(el => {
     el.onclick = () => openPlaylist(PL_CACHE[+el.dataset.i]);
   });
   const mb = $('moreBtn');

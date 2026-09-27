@@ -93,6 +93,16 @@ def sanitize(name: str) -> str:
     return name
 
 
+_UESC = re.compile(r"\\u([0-9a-fA-F]{4})")
+
+
+def _unescape(s: str) -> str:
+    """上游把 + & / 之类转义成 \\u002b 这种写法，统一还原（否则歌单名会带 \\u002b）。"""
+    if not s:
+        return s
+    return _UESC.sub(lambda m: chr(int(m.group(1), 16)), s)
+
+
 def parse_song_cards(page_html: str) -> list[dict]:
     """解析 go-music-dl 搜索页里的 <li class="song-card" ...>。"""
     cards = re.findall(r'<li class="song-card"([^>]*)>', page_html)
@@ -101,7 +111,7 @@ def parse_song_cards(page_html: str) -> list[dict]:
         d = dict(re.findall(r'data-([a-z-]+)="([^"]*)"', attrs))
         if not d.get("id"):
             continue
-        out.append({k: html.unescape(v) for k, v in d.items()})
+        out.append({k: _unescape(html.unescape(v)) for k, v in d.items()})
     return out
 
 
@@ -110,7 +120,7 @@ def parse_playlist_cards(page: str) -> list[dict]:
     seen: set[str] = set()
     out: list[dict] = []
     for raw in re.findall(r"navigateTo\('([^']*playlist\?[^']*)'\)", page):
-        q = raw.replace("\\u0026", "&").replace("\\/", "/")
+        q = _unescape(raw).replace("\\u0026", "&").replace("\\/", "/")
         q = q.split("?", 1)[1] if "?" in q else q
         d = dict(parse_qsl(q))
         pid = d.get("id")
@@ -292,6 +302,31 @@ class MusicDlProvider(BaseProvider):
                 f"{self.base}/category_playlists?{urlencode(params)}",
                 headers={"User-Agent": "music-add/1.0"},
             )
+            r.raise_for_status()
+        return parse_playlist_cards(r.text)
+
+    # ---- 每日推荐 / 歌单搜索（首页用） ----
+    RECOMMEND_SOURCES = ["netease", "qq", "kugou", "kuwo"]   # 上游 /recommend 只支持这四个
+
+    async def recommend_playlists(self, sources: Iterable[str] | None = None) -> list[dict]:
+        """每日推荐歌单：上游 /recommend 页（各平台官方推荐）。"""
+        srcs = [s for s in (sources or self.RECOMMEND_SOURCES) if s in self.RECOMMEND_SOURCES] \
+            or list(self.RECOMMEND_SOURCES)
+        params: list[tuple[str, str]] = [("sources", s) for s in srcs]
+        async with httpx.AsyncClient(timeout=40, follow_redirects=True) as c:
+            r = await c.get(f"{self.base}/recommend?{urlencode(params)}",
+                            headers={"User-Agent": "music-add/1.0"})
+            r.raise_for_status()
+        return parse_playlist_cards(r.text)
+
+    async def playlist_search(self, keyword: str, sources: Iterable[str] | None = None) -> list[dict]:
+        """歌单搜索（type=playlist）：用来找「新歌榜」「9月热门」这类歌单。"""
+        srcs = list(sources or self.RECOMMEND_SOURCES)
+        params: list[tuple[str, str]] = [("q", keyword), ("type", "playlist")]
+        params += [("sources", s) for s in srcs]
+        async with httpx.AsyncClient(timeout=40, follow_redirects=True) as c:
+            r = await c.get(f"{self.base}/search?{urlencode(params)}",
+                            headers={"User-Agent": "music-add/1.0"})
             r.raise_for_status()
         return parse_playlist_cards(r.text)
 

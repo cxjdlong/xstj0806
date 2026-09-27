@@ -698,6 +698,110 @@ async def api_categories(provider: str = "music-dl", user: str = Depends(current
         raise HTTPException(status_code=502, detail=f"取歌单分类失败：{exc}") from exc
 
 
+# ---------------- 首页聚合：每日推荐 / 新歌榜 / 当月热门 / 推荐歌单 ----------------
+_HOME_CACHE: dict[str, tuple[float, dict]] = {}
+_HOME_TTL = 1800          # 30 分钟；跨月后 key 变了自然重取
+
+
+def _pick_playlist(items: list[dict], keyword: str) -> dict | None:
+    """从歌单搜索结果里挑最像“官方榜单”的那个（名字贴近 + 创作者像官号 + 曲目够多）。"""
+    best, best_score = None, float("-inf")
+    kw = (keyword or "").replace(" ", "")
+    for it in items or []:
+        name = (it.get("name") or "").strip()
+        if not name:
+            continue
+        flat = name.replace(" ", "")
+        score = 0.0
+        if flat == kw:
+            score += 100
+        elif kw and kw in flat:
+            score += 60
+        else:
+            hit = sum(1 for ch in kw if ch in flat)
+            if not kw or hit < len(kw) * 0.6:
+                continue
+            score += hit * 8
+        creator = it.get("creator") or ""
+        if any(k in creator for k in ("官方", "网易云", "QQ音乐", "酷狗", "酷我", "音乐", "精选", "歌单")):
+            score += 25
+        n = int(it.get("trackCount") or 0)
+        score += min(n, 300) * 0.15      # 曲目多更像榜单，但别让超大歌单压过名字匹配
+        if n < 10:
+            score -= 30
+        if score > best_score:
+            best, best_score = it, score
+    return best
+
+
+@app.get("/api/home")
+async def api_home(source: str = "", provider: str = "music-dl", user: str = Depends(current_user)):
+    """首页：每日推荐 + 新歌榜 + {当月}月热门 + 推荐歌单网格（内存缓存 30 分钟）。"""
+    p = providers.get(provider)
+    if not hasattr(p, "recommend_playlists"):
+        raise HTTPException(status_code=400, detail=f"音源 {provider} 暂不支持首页推荐")
+
+    month = int(time.strftime("%m"))
+    now = time.time()
+    key = f"{provider}|{source}|{month}"
+    hit = _HOME_CACHE.get(key)
+    if hit and now - hit[0] < _HOME_TTL:
+        return hit[1]
+
+    srcs = [source] if source else list(getattr(p, "RECOMMEND_SOURCES", []) or [])
+    try:
+        rec = await p.recommend_playlists(srcs)
+    except Exception:  # noqa: BLE001
+        rec = []
+
+    async def _search(kw: str) -> list[dict]:
+        try:
+            return await p.playlist_search(kw, srcs)
+        except Exception:  # noqa: BLE001
+            return []
+
+    kw_new = "新歌榜"
+    kw_month = f"{month}月热门"
+    got_new, got_month = await asyncio.gather(_search(kw_new), _search(kw_month))
+
+    entries: list[dict] = []
+    daily = _pick_playlist(rec, "每日推荐") or (rec[0] if rec else None)
+    if daily:
+        entries.append({"key": "daily", "title": "每日推荐",
+                        "sub": daily.get("creator") or "官方推荐", "playlist": daily})
+    hit_new = _pick_playlist(got_new, kw_new)
+    if hit_new:
+        entries.append({"key": "new", "title": "新歌榜",
+                        "sub": f"{hit_new.get('trackCount') or 0} 首", "playlist": hit_new})
+    hit_month = _pick_playlist(got_month, kw_month)
+    if hit_month:
+        entries.append({"key": "month", "title": f"{month}月热门",
+                        "sub": f"{hit_month.get('trackCount') or 0} 首", "playlist": hit_month})
+
+    # 推荐歌单网格：只用平台官方推荐（质量稳）；太少才拿「当月热门」搜索结果补位
+    grid: list[dict] = []
+    seen: set[str] = set()
+
+    def _add(items: list[dict]) -> None:
+        for it in items:
+            k = f"{it.get('source')}:{it.get('id')}"
+            if k in seen or not it.get("cover"):
+                continue
+            seen.add(k)
+            grid.append(it)
+
+    _add(rec)
+    if len(grid) < 16:
+        _add(got_month)
+
+    data = {"month": month, "entries": entries, "playlists": grid, "cachedAt": int(now)}
+    _HOME_CACHE[key] = (now, data)
+    if len(_HOME_CACHE) > 32:          # 简单裁剪，别无限涨
+        for k in sorted(_HOME_CACHE, key=lambda x: _HOME_CACHE[x][0])[:16]:
+            _HOME_CACHE.pop(k, None)
+    return data
+
+
 @app.get("/api/category")
 async def api_category(
     source: str,
