@@ -891,6 +891,7 @@ async function openPlaylist(p) {
   const plSub = (p.description || '').trim()
     || [(p.trackCount ? p.trackCount + ' 首' : ''), (p.creator || '')].filter(Boolean).join(' · ');
   showListing(CUR_PL.name, plSub, [], {
+    hideBack: true,   // 返回按钮取消展示：用系统返回手势/返回键即可回首页
     actions: [{ id: 'playPlBtn', label: '▶ 播放歌单', fn: () => playWholePlaylist() }],
   });
   await loadPlaylistPage(1);
@@ -956,14 +957,16 @@ function showListing(title, sub, items, opts) {
     : `<div class="info"><div class="title">${esc(title)}</div><div class="sub">${esc(sub || '')}</div></div>`;
   const acts = (opts.actions || [])
     .map(a => `<button class="actbtn" id="${esc(a.id)}">${esc(a.label)}</button>`).join('');
+  const backHtml = opts.hideBack ? '' : '<button class="back" id="backBtn">返回</button>';
   $('listing').innerHTML = `
     <div class="lhead">
-      <button class="back" id="backBtn">返回</button>
+      ${backHtml}
       ${acts}
       ${info}
     </div>
     <div id="listBody">${items.length ? '' : '<div class="empty">加载中…</div>'}</div>`;
-  $('backBtn').onclick = () => { showHome(); };
+  const backEl = $('backBtn');
+  if (backEl) backEl.onclick = () => { showHome(); };
   (opts.actions || []).forEach(a => { const el = $(a.id); if (el) el.onclick = () => a.fn(); });
   if (items.length) renderListing(items, title, opts.total || 0, opts);
 }
