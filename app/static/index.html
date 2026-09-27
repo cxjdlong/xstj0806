@@ -1579,7 +1579,7 @@ async function loadTasks() {
     }
   }
   PREV_ACTIVE = active;
-  if (active) QUEUE_SEEN = false;      // 新一批开始 → 完成后再提示一次
+  if (active) { QUEUE_SEEN = false; window._queueHideAt = 0; }   // 新一批开始 → 完成后再提示一次
 
   // 只在“正在下载/有失败”时常驻；全部完成只提示一次（6 秒后自动收起），不做常驻
   if (active || failed) {
@@ -1588,11 +1588,18 @@ async function loadTasks() {
     $('queueCount').textContent = active ? (active + ' 下载中') : (failed + ' 失败');
   } else if (finished && !QUEUE_SEEN) {
     QUEUE_SEEN = true;
+    clearTimeout(window._queueHide);
     $('queueBtn').hidden = false;
     $('queueCount').textContent = '✓ 已完成 ' + finished;
-    clearTimeout(window._queueHide);
-    window._queueHide = setTimeout(() => { $('queueBtn').hidden = true; }, 6000);
+    window._queueHideAt = Date.now() + 6000;          // 展示 6 秒；期间 3 秒轮询别把它藏掉
+    window._queueHide = setTimeout(() => {
+      window._queueHideAt = 0;
+      $('queueBtn').hidden = true;
+    }, 6000);
+  } else if (window._queueHideAt && Date.now() < window._queueHideAt) {
+    /* 完成提示还在展示期内 —— 保持显示 */
   } else {
+    window._queueHideAt = 0;
     $('queueBtn').hidden = true;
   }
   if (!$('queueSheet').hidden) renderQueue();
