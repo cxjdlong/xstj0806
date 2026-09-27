@@ -16,12 +16,14 @@
     --fg:#1b2130; --fg2:#6b7383; --fg3:#98a0ae;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;background:var(--bg);color:var(--fg)}
+  html,body{margin:0;padding:0;width:100%;max-width:100%;height:100%;overflow:hidden;
+            background:var(--bg);color:var(--fg);overscroll-behavior:none}
   body{font:16px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
        min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
   [hidden]{display:none!important}
   /* ---------- 登录 ---------- */
-  #login{flex:1;display:flex;flex-direction:column;justify-content:center;
+  #login{flex:1;display:flex;flex-direction:column;justify-content:center;overflow-y:auto;
+         overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
          min-height:100vh;min-height:100dvh;padding:24px 20px calc(24px + env(safe-area-inset-bottom))}
   .brand{font-size:23px;font-weight:600;letter-spacing:.5px;text-align:center;color:var(--fg)}
   .brand small{display:block;font-size:13px;font-weight:400;color:var(--fg3);margin-top:6px}
@@ -68,8 +70,9 @@
   #main{flex:1;min-height:0;display:flex;overflow:hidden}
   #home{flex:1;min-width:0;display:flex;overflow:hidden}
   /* 左栏：音源下拉 + 横线 + 分类（竖排） */
-  #cats{flex:0 0 104px;width:104px;position:relative;overflow-y:auto;background:#fff;
-        border-right:1px solid var(--line);padding-bottom:120px;-webkit-overflow-scrolling:touch}
+  #cats{flex:0 0 104px;width:104px;position:relative;overflow-y:auto;overscroll-behavior:contain;
+        touch-action:pan-y;background:#fff;border-right:1px solid var(--line);
+        padding-bottom:120px;-webkit-overflow-scrolling:touch}
   .srcsel{display:flex;align-items:center;justify-content:center;gap:4px;width:100%;border:0;background:#fff;
           padding:11px 8px 9px;font-size:12px;font-weight:600;color:var(--pri-d);text-align:center}
   .srcsel .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -90,9 +93,13 @@
          padding:7px 9px;font-size:12.5px;border-radius:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cchip.on{background:var(--pri-l);color:var(--pri-d);font-weight:600}
   /* 右侧内容列：快捷入口 → 推荐歌单 */
-  #plgrid{flex:1;min-width:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  #plgrid{flex:1;min-width:0;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;
+          -webkit-overflow-scrolling:touch}
   /* 快捷入口：每日推荐 / 新歌榜 / 当月热门 —— 放在分类网格的第一排位置 */
-  #quickRow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:8px 10px 2px}
+  /* 三入口固定在右侧顶部：右侧歌单滚动时它不跟着走 */
+  #quickRow{position:sticky;top:0;z-index:12;background:var(--bg);
+            display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;
+            padding:8px 10px 8px;box-shadow:0 8px 12px -10px rgba(16,24,40,.35)}
   .qcard{border:0;border-radius:10px;padding:9px 8px;min-height:66px;text-align:left;color:#fff;
          display:flex;flex-direction:column;justify-content:space-between;min-width:0;
          box-shadow:0 4px 12px rgba(16,24,40,.10)}
@@ -120,7 +127,7 @@
              -webkit-box-orient:vertical;overflow:hidden;word-break:break-all}
   .pcard .pm{font-size:10.5px;color:#8b93a2;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   /* ---------- 曲目列表视图 ---------- */
-  #listing{flex:1;min-width:0;overflow-y:auto;padding-bottom:132px;-webkit-overflow-scrolling:touch}
+  #listing{flex:1;min-width:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-bottom:132px}
   .lhead{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.97);backdrop-filter:blur(8px);
          display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid var(--line);min-width:0}
   .back{flex:0 0 auto;border:0;background:#eef1f7;color:#3a4354;border-radius:8px;padding:6px 11px;font-size:13px}
@@ -187,7 +194,7 @@
   .sheet{position:fixed;inset:0;z-index:60;background:rgba(18,24,38,.42);display:flex;align-items:flex-end}
   /* 确认层必须高于其它弹层(z-index:60)：其在 DOM 里排最前，从歌单/歌曲库弹层里删歌时会被盖住看不见；低于 toast(80) */
   #cfmSheet{z-index:70}
-  .sheet .panel{width:100%;max-height:86dvh;background:#fff;border-radius:16px 16px 0 0;
+  .sheet .panel{width:100%;max-height:86dvh;overscroll-behavior:contain;background:#fff;border-radius:16px 16px 0 0;
                 padding:16px 14px calc(16px + env(safe-area-inset-bottom));overflow-y:auto;
                 box-shadow:0 -6px 24px rgba(16,24,40,.12)}
   .sheet h3{margin:0 0 10px;font-size:16px}
@@ -255,7 +262,7 @@
 </section>
 
 <!-- ================= 主界面 ================= -->
-<section id="app" hidden style="flex:1;display:flex;flex-direction:column;min-height:100vh;min-height:100dvh">
+<section id="app" hidden style="flex:1;min-height:0;display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden">
   <div class="topbar">
     <div class="tbrow">
       <div class="searchwrap">
