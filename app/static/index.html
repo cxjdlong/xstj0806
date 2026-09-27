@@ -70,8 +70,8 @@
   /* 左栏：音源下拉 + 横线 + 分类（竖排） */
   #cats{flex:0 0 104px;width:104px;position:relative;overflow-y:auto;background:#fff;
         border-right:1px solid var(--line);padding-bottom:120px;-webkit-overflow-scrolling:touch}
-  .srcsel{display:flex;align-items:center;gap:3px;width:100%;border:0;background:#fff;
-          padding:11px 8px 9px;font-size:12px;font-weight:600;color:var(--pri-d);text-align:left}
+  .srcsel{display:flex;align-items:center;justify-content:center;gap:4px;width:100%;border:0;background:#fff;
+          padding:11px 8px 9px;font-size:12px;font-weight:600;color:var(--pri-d);text-align:center}
   .srcsel .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .srcsel .car{flex:0 0 auto;font-size:9px;color:var(--fg3)}
   .srclist{position:absolute;left:6px;right:6px;top:42px;z-index:36;background:#fff;
@@ -85,8 +85,8 @@
   /* 左栏分组标题（语种/场景/风格…）：大一点 + 蓝色底 */
   .cgrp{font-size:13px;font-weight:600;color:var(--pri-d);background:var(--pri-l);
         border:1px solid #d8e4ff;border-radius:8px;padding:6px 8px;margin:9px 6px 4px;
-        letter-spacing:.5px}
-  .cchip{display:block;width:100%;border:0;background:transparent;color:#4b5563;text-align:left;
+        letter-spacing:.5px;text-align:center}
+  .cchip{display:block;width:100%;border:0;background:transparent;color:#4b5563;text-align:center;
          padding:7px 9px;font-size:12.5px;border-radius:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cchip.on{background:var(--pri-l);color:var(--pri-d);font-weight:600}
   /* 右侧内容列：快捷入口 → 推荐歌单 */
