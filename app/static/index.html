@@ -1465,6 +1465,33 @@ function playNotice(msg, ms) {
   }, hold);
 }
 
+/* 加载超时守门：5 秒还没放出声 → 先换源重试（同样只等 5 秒），仍不行就自动下一首 */
+function startLoadGuard() {
+  clearTimeout(LOAD_GUARD);
+  LOAD_GUARD = setTimeout(async () => {
+    LOAD_GUARD = null;
+    if (!CURRENT || !audio.paused) return;          // 已经在播了，不用管
+    playNotice('加载超时…', 4000);
+    if (!CURRENT._switched) {
+      try {
+        const alt = await api('/api/alt?t=' + q(CURRENT.token));
+        alt._switched = true;
+        playNotice('换源重试…', 3000);
+        play(alt, CURRENT.token);
+        return;
+      } catch (e) { /* 没有别的源，走下面跳下一首 */ }
+    }
+    if (QUEUE.length > 1) {
+      playNotice('加载超时，自动下一首', 3200);
+      playNext(1);
+    } else {
+      playNotice('加载超时，请重试', 4500);
+      releasePlayer(true);
+    }
+  }, LOAD_TIMEOUT_MS);
+}
+function clearLoadGuard() { clearTimeout(LOAD_GUARD); LOAD_GUARD = null; }
+
 /* 把播放状态交给 App 壳的原生 MediaSession（耳机媒体键 / 车机显示歌名歌手封面） */
 function pushNativeMeta(t, playing) {
   if (!t || !window.Android || !Android.mediaMeta) return;
@@ -1535,6 +1562,7 @@ async function play(t, replaceToken) {
   CURRENT = t;
   LOAD_PCT = 0;                      // 新歌开始加载
   audio.src = '/api/stream?t=' + q(t.token);
+  startLoadGuard();                  // 5 秒不出声 → 换源/下一首
   audio.play().catch(e => playNotice('播放失败：' + e.message, 5000));
   // 歌词：总是自动加载（锁屏卡片也要显示歌词）；面板开关是“开”的再弹出来
   loadLyric(t);
@@ -1563,6 +1591,7 @@ $('prevBtn').onclick = () => mediaCmd('prev');
 $('nextBtn').onclick = () => mediaCmd('next');
 /* 释放播放器：停音频 + 卸载 src（audio.load() 才真正放掉解码器/缓冲）+ 清歌词，别长时间占内存 */
 function releasePlayer(keepInfo) {
+  clearLoadGuard();
   try { audio.pause(); } catch (e) {}
   try { audio.removeAttribute('src'); audio.load(); } catch (e) {}
   LRC = { lines: [], idx: -1, token: '' };
@@ -1582,7 +1611,10 @@ function releasePlayer(keepInfo) {
 
 $('closePlayer').onclick = () => releasePlayer(false);
 audio.onplay = () => $('playToggle').textContent = '❚❚';
-audio.onpause = () => $('playToggle').textContent = '▶';
+audio.onpause = () => {
+  $('playToggle').textContent = '▶';
+  if (audio.currentTime > 0) clearLoadGuard();     // 已经放出来过 → 用户主动暂停，撤销守门
+};
 let SEEKING = false;   // 拖动进度条时不要被 timeupdate 拉回
 $('prog').addEventListener('input', () => { SEEKING = true; });
 $('prog').addEventListener('change', () => {
@@ -1595,6 +1627,8 @@ $('prog').addEventListener('change', () => {
 });
 let POS_AT = 0;    // 进度上报节流（锁屏/车机进度条）
 let IDLE_TIMER = null;   // 暂停久了自动释放的定时器
+let LOAD_GUARD = null;   // 加载超时守门（迟迟不出声就换源/跳下一首）
+const LOAD_TIMEOUT_MS = 5000;   // 5 秒还不出声就换源/跳下一首（换源后同样只等 5 秒）
 audio.ontimeupdate = () => {
   const d = audio.duration || 0;
   if (!SEEKING) $('prog').value = d ? Math.round((audio.currentTime / d) * 1000) : 0;
@@ -1618,9 +1652,11 @@ audio.addEventListener('waiting', () => {
 });
 audio.addEventListener('playing', () => {
   if (PLAY_NOTICE === '缓冲中…') PLAY_NOTICE = '';
+  clearLoadGuard();                       // 出声了，撤掉超时守门
   clearTimeout(IDLE_TIMER); IDLE_TIMER = null;
   pushNativeInfo(srcLabel(CURRENT && CURRENT.source));
 });
+audio.addEventListener('loadeddata', () => { if (!audio.paused) clearLoadGuard(); });
 /* 暂停超过 10 分钟没动 → 自动释放（省内存/电量），下次点歌重新加载 */
 audio.addEventListener('pause', () => {
   clearTimeout(IDLE_TIMER);
@@ -1634,6 +1670,7 @@ audio.onerror = async () => {
   if (!audio.src || !CURRENT) return;
   if (CURRENT._switched) { playNotice('换源失败，请换一首', 6000); return; }
   const key = CURRENT.token;
+  clearLoadGuard();
   playNotice('取流失败，自动换源…', 3000);
   try {
     const alt = await api('/api/alt?t=' + q(key));
