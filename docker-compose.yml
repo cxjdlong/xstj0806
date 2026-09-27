@@ -15,6 +15,8 @@ services:
       - /usr/local/apps/@appdata/trim.music/db:/fnos-db:ro
       # 本服务自己的会话/任务数据
       - ./data:/app/data
+      # 安卓包目录（宿主 sync-apk.sh 把最新 APK 放这里，/music.apk 直接下载）
+      - ./apk:/apk:ro
     environment:
       MUSICDL_BASE: "http://192.168.10.10:19010/music"
       MUSIC_DIR: "/music"

@@ -36,6 +36,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/app/data"))
 STATIC_DIR = BASE_DIR / "static"
 MUSIC_DIR = Path(os.environ.get("MUSIC_DIR", "/music"))
+APK_DIR = Path(os.environ.get("APK_DIR", "/apk"))
 MUSICDL_BASE = os.environ.get("MUSICDL_BASE", "http://192.168.10.10:19010/music")
 FNOS_SOCKET = os.environ.get("FNOS_SOCKET", "/run/trim_music.socket")
 FNOS_DB = os.environ.get("FNOS_DB", "/fnos-db/music.db")
@@ -406,8 +407,15 @@ def _try_add_once(task: Task) -> bool:
     if not pick:
         return False  # 还没入库，等下一轮
 
+    have = _playlist_guids(token, guid)
+    if have is not None and str(pick["guid"]) in have:
+        with TASKS_LOCK:
+            task.addStatus, task.addNote = "added", "歌单里已有，未重复添加"
+        return True
+
     try:
         fnos.add_tracks(token, guid, [pick["guid"]])
+        _PL_GUID_CACHE.pop(guid, None)
         with TASKS_LOCK:
             task.addStatus = "added"
             task.addNote = task.playlistName or ""
@@ -1482,16 +1490,41 @@ async def playlist_delete(payload: dict, user: str = Depends(current_user)):
     return {"ok": True, "items": items, "local": False}
 
 
-def _match_and_add_to_fnos(token: str, playlist_guid: str, items: list[dict]) -> tuple[list, list, list, list]:
+_PL_GUID_CACHE: dict[str, tuple[float, set[str]]] = {}
+
+
+def _playlist_guids(token: str, playlist_guid: str, ttl: float = 30.0) -> set[str] | None:
+    """目标歌单里已有的 trackGUID 集合（30 秒缓存，避免每次重试都拉一遍歌单）。
+
+    取不到（飞牛不可用）返回 None —— 调用方按“不知道”处理，不要因此拦掉添加。
+    """
+    now = time.time()
+    hit = _PL_GUID_CACHE.get(playlist_guid)
+    if hit and now - hit[0] < ttl:
+        return hit[1]
+    try:
+        items = fnos.playlist_tracks(token, playlist_guid)
+    except Exception:  # noqa: BLE001
+        return None
+    guids = {str(i.get("guid") or "") for i in items}
+    guids.discard("")
+    _PL_GUID_CACHE[playlist_guid] = (now, guids)
+    return guids
+
+
+def _match_and_add_to_fnos(token: str, playlist_guid: str, items: list[dict]) -> tuple[list, list, list, list, list]:
     """把 items 在飞牛曲库里匹配后加入指定飞牛歌单。
 
-    返回 (added, missing, errors, missing_tracks)。
+    返回 (added, missing, errors, missing_tracks, existing)；
+    existing = 曲库里有、但目标歌单里本来就有的（不重复加，前端给提示用）。
     """
     added: list[str] = []
     missing: list[str] = []
     errors: list[str] = []
+    existing: list[str] = []
     missing_tracks: list[dict] = []
     guids: list[str] = []
+    have = _playlist_guids(token, playlist_guid) or set()
     for raw in items:
         title = (raw.get("title") or "").strip()
         artist = (raw.get("artist") or "").strip()
@@ -1519,6 +1552,9 @@ def _match_and_add_to_fnos(token: str, playlist_guid: str, items: list[dict]) ->
             item.setdefault("provider", "")
             missing_tracks.append(item)
             continue
+        if str(best["guid"]) in have:
+            existing.append(f"{title} - {artist}")
+            continue
         guids.append(best["guid"])
         added.append(f"{title} - {artist}")
 
@@ -1527,7 +1563,8 @@ def _match_and_add_to_fnos(token: str, playlist_guid: str, items: list[dict]) ->
             fnos.add_tracks(token, playlist_guid, guids)
         except FnosMusicError as exc:
             raise HTTPException(status_code=502, detail=f"加入歌单失败：{exc}") from exc
-    return added, missing, errors, missing_tracks
+        _PL_GUID_CACHE.pop(playlist_guid, None)      # 刚加过 → 缓存作废
+    return added, missing, errors, missing_tracks, existing
 
 
 @app.post("/api/playlist/import-to-fnos")
@@ -1566,7 +1603,7 @@ async def playlist_import_to_fnos(payload: dict, user: str = Depends(current_use
             raise HTTPException(status_code=502, detail="新建歌单失败：没拿到歌单 id")
 
     try:
-        added, missing, errors, missing_tracks = _match_and_add_to_fnos(token, tgt, tracks)
+        added, missing, errors, missing_tracks, existing = _match_and_add_to_fnos(token, tgt, tracks)
     except HTTPException:
         raise
     except FnosMusicError as exc:
@@ -1578,6 +1615,7 @@ async def playlist_import_to_fnos(payload: dict, user: str = Depends(current_use
         "added": added,
         "missing": missing,
         "missingTracks": missing_tracks,
+        "existing": existing,
         "errors": errors,
         "items": all_playlists(user),
     }
@@ -1594,6 +1632,7 @@ async def playlist_add(payload: dict, user: str = Depends(current_user)):
     if local_playlist(guid) is not None:
         playlists = _load_local_playlists()
         added: list[str] = []
+        existing: list[str] = []
         for p in playlists:
             if p.get("guid") != guid:
                 continue
@@ -1602,7 +1641,10 @@ async def playlist_add(payload: dict, user: str = Depends(current_user)):
             for raw in items:
                 title = (raw.get("title") or "").strip()
                 artist = (raw.get("artist") or "").strip()
-                if not title or (title, artist) in have:
+                if not title:
+                    continue
+                if (title, artist) in have:
+                    existing.append(f"{title} - {artist}")     # 歌单里已经有了
                     continue
                 tracks.append(
                     {
@@ -1624,6 +1666,7 @@ async def playlist_add(payload: dict, user: str = Depends(current_user)):
             "added": added,
             "missing": [],
             "missingTracks": [],
+            "existing": existing,
             "errors": [],
             "local": True,
         }
@@ -1635,13 +1678,14 @@ async def playlist_add(payload: dict, user: str = Depends(current_user)):
     if not token:
         raise HTTPException(status_code=503, detail="该账号还没有飞牛音乐登录令牌")
 
-    added, missing, errors, missing_tracks = _match_and_add_to_fnos(token, guid, items)
+    added, missing, errors, missing_tracks, existing = _match_and_add_to_fnos(token, guid, items)
 
     return {
         "ok": True,
         "added": added,
         "missing": missing,
         "missingTracks": missing_tracks,
+        "existing": existing,
         "errors": errors,
     }
 
@@ -1674,6 +1718,20 @@ async def preview_page():
             "Pragma": "no-cache",
             "Expires": "0",
         },
+    )
+
+
+@app.get("/music.apk")
+async def download_apk():
+    """最新安卓安装包：宿主上的 sync-apk.sh 从 GitHub Release 拉下来放进挂载目录。"""
+    f = APK_DIR / "music.apk"
+    if not f.exists():
+        raise HTTPException(status_code=404, detail="还没有打包好的 APK（先让 CI 跑一次）")
+    return FileResponse(
+        f,
+        media_type="application/vnd.android.package-archive",
+        filename="music.apk",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
     )
 
 

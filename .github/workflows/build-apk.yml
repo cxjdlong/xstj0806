@@ -89,6 +89,22 @@ jobs:
           git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/build-log --force
           echo "pushed log"
 
+      - name: Publish APK to GitHub Release (apk-latest)
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          APK=$(ls android/app/build/outputs/apk/debug/*.apk | head -1)
+          test -n "$APK" || { echo "::error::no apk produced"; exit 1; }
+          cp "$APK" music.apk
+          ls -l music.apk
+          gh release view apk-latest >/dev/null 2>&1 || \
+            gh release create apk-latest --title "最新安卓包" \
+              --notes "自动构建，每次打包覆盖同一个文件（服务器会定时拉取 → /music.apk）" --target main
+          gh release upload apk-latest music.apk --clobber
+          echo "直链: https://github.com/${{ github.repository }}/releases/download/apk-latest/music.apk"
+
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4

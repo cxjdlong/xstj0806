@@ -1192,8 +1192,9 @@ $('plistAddBtn').onclick = async () => {
     }
     let msg = '';
     if (d.added.length) msg += '已加入 ' + d.added.length + ' 首';
+    if (d.existing && d.existing.length) msg += (msg ? '；' : '') + d.existing.length + ' 首歌单里已有（没重复加）';
     if (miss.length) msg += (msg ? '；' : '') + miss.length + ' 首曲库里没有，正在下载并会自动加入';
-    toast(msg || '没有可加入的曲目', 4800);
+    toast(msg || '列表里的歌都已在歌单中', 4800);
   } catch (e) { toast(e.message, 4000); }
   finally { $('plistAddBtn').disabled = false; $('plistAddBtn').textContent = '全部加入歌单'; }
 };
@@ -1578,14 +1579,19 @@ async function loadTasks() {
     }
   }
   PREV_ACTIVE = active;
+  if (active) QUEUE_SEEN = false;      // 新一批开始 → 完成后再提示一次
 
-  // 按钮只在"有进行中/失败"或"刚下载完还没看过"时出现，不常驻
+  // 只在“正在下载/有失败”时常驻；全部完成只提示一次（6 秒后自动收起），不做常驻
   if (active || failed) {
+    clearTimeout(window._queueHide);
     $('queueBtn').hidden = false;
-    $('queueCount').textContent = active ? (active + ' 进行中') : (failed + ' 失败');
+    $('queueCount').textContent = active ? (active + ' 下载中') : (failed + ' 失败');
   } else if (finished && !QUEUE_SEEN) {
+    QUEUE_SEEN = true;
     $('queueBtn').hidden = false;
     $('queueCount').textContent = '✓ 已完成 ' + finished;
+    clearTimeout(window._queueHide);
+    window._queueHide = setTimeout(() => { $('queueBtn').hidden = true; }, 6000);
   } else {
     $('queueBtn').hidden = true;
   }
@@ -2084,8 +2090,11 @@ async function addTrackToPl(guid, name, t) {
     return;
   }
   await refreshPlaylists();
+  const inList = (d.existing || []).length > 0;
   const dup = !(d.added || []).length;
-  toast(dup ? ('这首歌已经在「' + (name || '歌单') + '」里了') : ('已加入「' + (name || '歌单') + '」'));
+  toast(inList ? ('《' + (t.title || '') + '》已经在「' + (name || '歌单') + '」里了，没重复加')
+               : (dup ? ('这首歌已经在「' + (name || '歌单') + '」里了')
+                      : ('已加入「' + (name || '歌单') + '」')));
 }
 
 function openAddPl(t) {
@@ -2203,8 +2212,9 @@ $('addBtn').onclick = async () => {
   try {
     const d = await api('/api/playlist/add', { method: 'POST', body: JSON.stringify({ playlistGuid: guid, items: picked }) });
     let msg = `已加入 ${d.added.length} 首`;
+    if (d.existing && d.existing.length) msg += `，其中 ${d.existing.length} 首歌单里已有（没重复加）`;
     if (d.missing && d.missing.length) msg += `，未入库 ${d.missing.length} 首（曲库索引稍等几秒再试）`;
-    toast(msg, 4000);
+    toast(msg, 4200);
   } catch (e) { toast(e.message, 4000); }
   finally { $('addBtn').disabled = false; $('addBtn').textContent = '加入歌单'; }
 };
